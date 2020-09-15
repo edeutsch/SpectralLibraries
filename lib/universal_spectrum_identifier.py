@@ -18,6 +18,7 @@ class UniversalSpectrumIdentifier(object):
         self.identifier_type = None
 
         self.collection_identifier = None
+        self.collection_type = None
         self.dataset_subfolder = None
         self.ms_run_name = None
         self.index_type = None
@@ -60,7 +61,10 @@ class UniversalSpectrumIdentifier(object):
 
         # Reset all destintion values for a fresh parse
         self.is_valid = False
+        self.identifier_type = None
+
         self.collection_identifier = None
+        self.collection_type = None
         self.dataset_subfolder = None
         self.ms_run_name = None
         self.index_type = None
@@ -69,6 +73,11 @@ class UniversalSpectrumIdentifier(object):
         self.peptidoform = None
         self.charge = None
         self.provenance_identifier = None
+
+        self.error = 0
+        self.error_code = None
+        self.error_message = None
+        self.warning_message = None
 
         # Get or set the usi string and ensure it is not not None
         if usi is None:
@@ -207,6 +216,16 @@ class UniversalSpectrumIdentifier(object):
                         self.ms_run_name += split_ms_run_name[i] + ']'
                     i += 1
 
+        # Validate the collection identifier against the currently allowed set
+        if self.collection_identifier is not None:
+            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$' }
+            for template_type,template in possible_templates.items():
+                match = re.match(template,self.collection_identifier)
+                if match:
+                    self.collection_type = template_type
+                    break
+            if self.collection_type is None:
+                self.set_error("UnsupportedCollection",f"The collection identifier does not match a supported template")
 
         # If there are no recorded errors, then we're in good shape
         if self.error == 0:
@@ -229,7 +248,8 @@ class UniversalSpectrumIdentifier(object):
         print("USI: " + str(self.usi))
         print("is_valid: " + str(self.is_valid))
         print("identifier type: " + str(self.identifier_type))
-        print("Dataset Identifier: " + str(self.collection_identifier))
+        print("Collection Identifier: " + str(self.collection_identifier))
+        print("Collection Type: " + str(self.collection_type))
         print("Dataset Subfolder: " + str(self.dataset_subfolder))
         print("MS run name: " + str(self.ms_run_name))
         print("Index flag: " + str(self.index_type))
@@ -319,9 +339,10 @@ def run_one_test():
         [   "valid", "mzspec:PXD001234:[Control[2]]fr10:scan:10951" ],
         [   "valid", "mzspec:PXD001234:[Control]fr10[7]:scan:10951" ],
         [   "valid", "mzspec:PXD001234:[Control[2]]fr10[7]:scan:10951" ],
+        [   "valid", "mzspec:MSV000086127:[Control[2]]fr10[7]:scan:10951" ],
     ]
  
-    usi_string = test_usis[21][1]
+    usi_string = test_usis[22][1]
 
     usi = UniversalSpectrumIdentifier()
     usi.parse(usi_string, verbose=1)
@@ -342,8 +363,8 @@ def example():
 #### If class is run directly
 def main():
     #example()
-    run_tests()
-    #run_one_test()
+    #run_tests()
+    run_one_test()
 
 
 if __name__ == "__main__": main()
