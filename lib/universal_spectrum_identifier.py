@@ -3,6 +3,10 @@ import sys
 def eprint(*args, **kwargs): print(*args, file=sys.stderr, **kwargs)
 
 import re
+import json
+
+from ontology import Ontology
+
 
 class UniversalSpectrumIdentifier(object):
 
@@ -24,6 +28,7 @@ class UniversalSpectrumIdentifier(object):
         self.index_type = None
         self.index = None
         self.interpretation = None
+        self.peptidoform_string = None
         self.peptidoform = None
         self.charge = None
         self.provenance_identifier = None
@@ -32,6 +37,10 @@ class UniversalSpectrumIdentifier(object):
         self.error_code = None
         self.error_message = None
         self.warning_message = None
+
+        print("INFO: Loading ontologies...")
+        self.ontologies = {}
+        self.ontologies['UNIMOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/unimod.obo')
 
         if usi:
             self.parse(usi,verbose=None)
@@ -71,6 +80,7 @@ class UniversalSpectrumIdentifier(object):
         self.index = None
         self.interpretation = None
         self.peptidoform = None
+        self.peptidoform_string = None
         self.charge = None
         self.provenance_identifier = None
 
@@ -176,7 +186,7 @@ class UniversalSpectrumIdentifier(object):
             if match:
                 self.interpretation = match.group(1) + '/' + match.group(2)
                 self.provenance_identifier = match.group(3)
-                self.peptidoform = match.group(1)
+                self.peptidoform_string = match.group(1)
                 self.charge = int(match.group(2))
                 self.identifier_type = 'UPSMPI'
 
@@ -184,7 +194,7 @@ class UniversalSpectrumIdentifier(object):
             else:
                 match = re.match(r'(.+)/(\d+)$', self.interpretation)
                 if match:
-                    self.peptidoform = match.group(1)
+                    self.peptidoform_string = match.group(1)
                     self.charge = int(match.group(2))
 
         # If the MS run name begins with a [ then try to extract a subfolder
@@ -227,6 +237,9 @@ class UniversalSpectrumIdentifier(object):
             if self.collection_type is None:
                 self.set_error("UnsupportedCollection",f"The collection identifier does not match a supported template")
 
+        # Try to parse the peptidoform
+        self.parse_peptidoform(verbose=verbose)
+
         # If there are no recorded errors, then we're in good shape
         if self.error == 0:
            self.is_valid = True
@@ -238,6 +251,90 @@ class UniversalSpectrumIdentifier(object):
             verboseprint("ERROR: Invalid USI " + self.usi)
 
         return self
+
+
+    #### Parse the peptidoform and decompose it into mass modifications
+    def parse_peptidoform(self, verbose=None):
+
+        if self.peptidoform_string is None:
+            return
+
+        characters = list(self.peptidoform_string)
+        character_stack = { 'square_brackets': 0 }
+
+        mass_modifications = {}
+        residues = []
+        self.peptidoform = { 'residues': residues, 'mass_modifications': mass_modifications }
+        i_residue = 0
+        current_residue = ''
+
+        i_char = 0
+        for char in characters:
+            if char == '[':
+                character_stack['square_brackets'] += 1
+                current_residue += char
+            elif char == ']':
+                if character_stack['square_brackets'] == 0:
+                    print(f"ERROR: Unmatched square bracket at position {i_char}")
+                elif character_stack['square_brackets'] == 1:
+                    current_residue += char
+                    character_stack['square_brackets'] -= 1
+                else:
+                    character_stack['square_brackets'] -= 1
+            else:
+                if character_stack['square_brackets'] > 0:
+                    current_residue += char
+                else:
+                    residues.append( { 'residue_string': current_residue, 'index': i_residue } )
+                    i_residue += 1
+                    current_residue = char
+
+            #print(f"{i_char}=={char}. {i_residue}=={current_residue}")
+            i_char += 1
+
+        if current_residue != '':
+            residues.append( { 'residue_string': current_residue, 'index': i_residue } )
+            i_residue += 1
+
+        for residue in residues:
+            if len(residue['residue_string']) > 1:
+                if residue['index'] == 0:
+                    residue['base_residue'] = 'nterm'
+                    offset = 1
+                else:
+                    residue['base_residue'] = residue['residue_string'][0]
+                    offset = 2
+                residue['modification_string'] = residue['residue_string'][offset:-1]
+                residue['modification_type'] = ''
+
+                if residue['modification_type'] == '':
+                    match = re.match(r'[\+\-][\d\.]+',residue['modification_string'])
+                    if match:
+                        residue['delta_mass'] = float(match.group(0))
+                        residue['modification_type'] = 'delta_mass'
+
+                if residue['modification_type'] == '':
+                    match = re.match(r'UNIMOD:\d+',residue['modification_string'])
+                    if match:
+                        identifier = match.group(0)
+                        if identifier in self.ontologies['UNIMOD'].terms:
+                            term = self.ontologies['UNIMOD'].terms[identifier]
+                            residue['delta_mass'] = term.monoisotopic_mass
+                        residue['modification_type'] = 'UNIMOD_identifier'
+
+                if residue['modification_type'] == '':
+                    if residue['modification_string'].upper() in self.ontologies['UNIMOD'].uc_names:
+                        matching_terms = self.ontologies['UNIMOD'].uc_names[residue['modification_string'].upper()]
+                        if len(matching_terms) == 1:
+                            identifier = matching_terms[0]
+                            if identifier in self.ontologies['UNIMOD'].terms:
+                                term = self.ontologies['UNIMOD'].terms[identifier]
+                                residue['delta_mass'] = term.monoisotopic_mass
+                            residue['modification_type'] = 'UNIMOD_name'
+                mass_modifications[residue['index']] = residue
+            #print(residue)
+
+
 
 
     # prints out USI attributes
@@ -255,9 +352,10 @@ class UniversalSpectrumIdentifier(object):
         print("Index flag: " + str(self.index_type))
         print("Index number: " + str(self.index))
         print("Interpretation: " + str(self.interpretation))
-        print("Peptidoform: " + str(self.peptidoform))
+        print("Peptidoform string: " + str(self.peptidoform_string))
         print("Charge: " + str(self.charge))
         print("Provenance identifier: " + str(self.provenance_identifier))
+        #print("Peptidoform: " + str(self.peptidoform))
 
 
 # If this class is run from the command line, perform a short little test to see if it is working correctly
@@ -340,14 +438,16 @@ def run_one_test():
         [   "valid", "mzspec:PXD001234:[Control]fr10[7]:scan:10951" ],
         [   "valid", "mzspec:PXD001234:[Control[2]]fr10[7]:scan:10951" ],
         [   "valid", "mzspec:MSV000086127:[Control[2]]fr10[7]:scan:10951" ],
+        [   "valid", "mzspec:PXD002437:fr5:scan:10951:[UNIMOD:214]PEPT[Phospho]IDEL[+12.0123]VIS[UNIMOD:1]K[iTRAQ4plex]/2" ],
     ]
  
-    usi_string = test_usis[22][1]
+    usi_string = test_usis[23][1]
 
     usi = UniversalSpectrumIdentifier()
     usi.parse(usi_string, verbose=1)
     print('==== Result:')
     usi.show()
+    print(json.dumps(usi.peptidoform, sort_keys=True, indent=2))
 
 
 #### A very simple example of using this class
