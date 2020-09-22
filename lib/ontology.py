@@ -234,12 +234,16 @@ class Ontology(object):
                 results[self.terms[child].name.upper()] = [child]
             if return_type == 'uclist':
                 result_list.append(self.terms[child].name.upper())
+            if return_type == 'term_tuples':
+                result_list.append({ 'curie': child, 'name': self.terms[child].name })
 
         if return_type == 'ucdict':
             return(results)
         if return_type == 'uclist':
             return(result_list)
-        
+        if return_type == 'term_tuples':
+            return(sorted(result_list,key=lambda x: x['name'].lower()))
+
 
 
     #########################################################################
@@ -326,6 +330,9 @@ def sort_by_relevance(x):
     value = x['sort'] * 1000 + len(x['name'])
     return(value)
 
+def sort_by_alpha(x):
+    value = x['sort'] * 1000 + len(x['name'])
+    return(value)
 
 #########################################################################
 #### A very simple example of using this class
@@ -389,12 +396,23 @@ def efo_example():
     for item in result_list:
         print(item)
 
+#########################################################################
+#### A very simple example of using this class
+def go_example():
+    ontology = Ontology(filename='/net/dblocal/wwwspecial/proteomecentral/extern/CVs/goslim_plant.obo',verbose=1)
+    ontology.show()
+    print("============================")
+    name = 'chlo'
+    result_list = ontology.fuzzy_search(search_string=name)
+    for item in result_list:
+        print(item)
+
 
 
 #########################################################################
 #### If class is run directly
 def main():
     #psims_example()
-    efo_example()
+    go_example()
 
 if __name__ == "__main__": main()
