@@ -226,6 +226,7 @@ class UniversalSpectrumIdentifier(object):
                     break
             if self.collection_type is None:
                 self.set_error("UnsupportedCollection",f"The collection identifier does not match a supported template")
+                return self
 
         # If there are no recorded errors, then we're in good shape
         if self.error == 0:
