@@ -161,7 +161,6 @@ class Ontology(object):
 
         #### If this is Unimod, create a special name_map that includes mass deltas
         if 'UNIMOD' in self.prefixes:
-            print("Found UniMod")
             self.create_mass_mod_map(verbose=verbose)
 
         #### Set the is_valid state
