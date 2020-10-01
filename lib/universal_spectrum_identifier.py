@@ -7,6 +7,11 @@ import json
 
 from ontology import Ontology
 
+print("INFO: Loading ontologies...")
+ontologies = {}
+#ontologies['UNIMOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/unimod.obo')
+ontologies['UNIMOD'] = Ontology(filename='/net/dblocal/wwwspecial/proteomecentral/extern/CVs/unimod.obo')
+
 
 class UniversalSpectrumIdentifier(object):
 
@@ -37,10 +42,6 @@ class UniversalSpectrumIdentifier(object):
         self.error_code = None
         self.error_message = None
         self.warning_message = None
-
-        print("INFO: Loading ontologies...")
-        self.ontologies = {}
-        self.ontologies['UNIMOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/unimod.obo')
 
         if usi:
             self.parse(usi,verbose=None)
@@ -265,7 +266,7 @@ class UniversalSpectrumIdentifier(object):
 
         mass_modifications = {}
         residues = []
-        self.peptidoform = { 'residues': residues, 'mass_modifications': mass_modifications }
+        self.peptidoform = { 'mass_modifications': mass_modifications, 'peptide_sequence': '' }
         i_residue = 0
         current_residue = ''
 
@@ -297,13 +298,19 @@ class UniversalSpectrumIdentifier(object):
             residues.append( { 'residue_string': current_residue, 'index': i_residue } )
             i_residue += 1
 
+        if residues[0]['residue_string'] == '':
+            residues = residues[1:]
+        #print(residues)
+
         for residue in residues:
+            #print(residue)
             if len(residue['residue_string']) > 1:
                 if residue['index'] == 0:
                     residue['base_residue'] = 'nterm'
                     offset = 1
                 else:
                     residue['base_residue'] = residue['residue_string'][0]
+                    self.peptidoform['peptide_sequence'] += residue['residue_string'][0]
                     offset = 2
                 residue['modification_string'] = residue['residue_string'][offset:-1]
                 residue['modification_type'] = ''
@@ -318,21 +325,27 @@ class UniversalSpectrumIdentifier(object):
                     match = re.match(r'UNIMOD:\d+',residue['modification_string'])
                     if match:
                         identifier = match.group(0)
-                        if identifier in self.ontologies['UNIMOD'].terms:
-                            term = self.ontologies['UNIMOD'].terms[identifier]
+                        if identifier in ontologies['UNIMOD'].terms:
+                            term = ontologies['UNIMOD'].terms[identifier]
                             residue['delta_mass'] = term.monoisotopic_mass
+                            residue['modification_name'] = term.name
                         residue['modification_type'] = 'UNIMOD_identifier'
 
                 if residue['modification_type'] == '':
-                    if residue['modification_string'].upper() in self.ontologies['UNIMOD'].uc_names:
-                        matching_terms = self.ontologies['UNIMOD'].uc_names[residue['modification_string'].upper()]
+                    if residue['modification_string'].upper() in ontologies['UNIMOD'].uc_names:
+                        matching_terms = ontologies['UNIMOD'].uc_names[residue['modification_string'].upper()]
                         if len(matching_terms) == 1:
                             identifier = matching_terms[0]
-                            if identifier in self.ontologies['UNIMOD'].terms:
-                                term = self.ontologies['UNIMOD'].terms[identifier]
+                            if identifier in ontologies['UNIMOD'].terms:
+                                term = ontologies['UNIMOD'].terms[identifier]
                                 residue['delta_mass'] = term.monoisotopic_mass
+                                residue['modification_name'] = term.name
                             residue['modification_type'] = 'UNIMOD_name'
                 mass_modifications[residue['index']] = residue
+
+            else:
+                self.peptidoform['peptide_sequence'] += residue['residue_string'][0]
+
             #print(residue)
 
 
@@ -442,7 +455,7 @@ def run_one_test():
         [   "valid", "mzspec:PXD002437:fr5:scan:10951:[UNIMOD:214]PEPT[Phospho]IDEL[+12.0123]VIS[UNIMOD:1]K[iTRAQ4plex]/2" ],
     ]
  
-    usi_string = test_usis[23][1]
+    usi_string = test_usis[2][1]
 
     usi = UniversalSpectrumIdentifier()
     usi.parse(usi_string, verbose=1)
