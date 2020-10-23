@@ -206,16 +206,16 @@ def run_list_test():
 
 #### A very simple example of using this class
 def example():
-    usi_string = "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951:PEPT[Phospho]IDELVISK/2"
+    usi_string = "mzspec:PXD000000:a:scan:1:{Hex|INFO:completely labile}[iTRAQ4plex]-EM[Oxidation]EVNESPEK[UNIMOD:214]-[Methyl]/2"
     usi_validator = UniversalSpectrumIdentifierValidator([usi_string])
     print(json.dumps(usi_validator.response,sort_keys=True,indent=2))
 
 
 #### If class is invoked directly
 def main():
-    #example()
+    example()
     #run_one_test()
-    run_list_test()
+    #run_list_test()
 
 
 if __name__ == "__main__": main()
