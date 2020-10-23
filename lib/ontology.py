@@ -224,9 +224,11 @@ class Ontology(object):
                     self.names[name] = [ curie ]
                 uc_name = name.upper()
                 if uc_name in self.uc_names:
-                    self.uc_names[uc_name].append(curie)
+                    #self.uc_names[uc_name].append(curie)
+                    self.uc_names[uc_name][curie] = 1
                 else:
-                    self.uc_names[uc_name] = [ curie ]
+                    #self.uc_names[uc_name] = [ curie ]
+                    self.uc_names[uc_name] = { curie: 1 }
 
 
     #########################################################################
