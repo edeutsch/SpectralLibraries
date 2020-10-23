@@ -163,10 +163,21 @@ class OntologyTerm(object):
                     self.set_error("TermIsAError",f"Unable to parse is_a line '{line}'")
 
             #############################
-            #### Process the part_of line
+            #### Process the relationship: part_of line
             match = re.search("^relationship: part_of",line)
             if match:
                 match = re.search("^\s*relationship:\s*part_of\s*(\S+)",line)
+                if match:
+                    self.parents.append( { "type": "part_of", "curie": match.groups()[0] } )
+                    has_match = True
+                else:
+                    self.set_error("TermPartOfError",f"Unable to parse part_of line '{line}'")
+
+            #############################
+            #### Process the part_of line
+            match = re.match(r"part_of",line)
+            if match:
+                match = re.match(r"part_of:\s*(\S+)",line)
                 if match:
                     self.parents.append( { "type": "part_of", "curie": match.groups()[0] } )
                     has_match = True
@@ -332,7 +343,7 @@ class OntologyTerm(object):
 
 
             ####################################################################################
-            #### Process mass modification data
+            #### Process mass modification data from UNIMOD
 
             #### Parse xref: delta_mono_mass
             match = re.search(r"^xref:\s*delta_mono_mass",line)
@@ -363,6 +374,28 @@ class OntologyTerm(object):
                     has_match = True
                 else:
                     self.set_error("TermSpecSiteError",f"Unable to parse xref line '{line}'")
+
+
+            ####################################################################################
+            #### Process mass modification data from PSI-MOD
+
+            #### Parse xref: delta_mono_mass
+            match = re.match(r"xref:\s*DiffMono",line)
+            if has_match is False and match:
+                match = re.match(r'xref:\s*DiffMono:\s+\"\s*([\+\-\.\d]+)\s*\"',line)
+                if match:
+                    self.monoisotopic_mass = float(match.group(1))
+                    has_match = True
+                else:
+                    match = re.match(r'xref:\s*DiffMono:\s+\"\s*(.+)\s*\"',line)
+                    if match:
+                        if match.group(1) == 'none':
+                            self.monoisotopic_mass = 0
+                            has_match = True
+                        else:
+                            self.set_error("TermDeltaMonoMassError",f"Unable to parse xref line '{line}'")
+                    else:
+                        self.set_error("TermDeltaMonoMassError",f"Unable to parse xref line '{line}'")
 
 
             #############################
