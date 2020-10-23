@@ -5,12 +5,19 @@ def eprint(*args, **kwargs): print(*args, file=sys.stderr, **kwargs)
 import re
 import json
 
-from ontology import Ontology
+from proforma_peptidoform import ProformaPeptidoform
+from response import Response
 
-print("INFO: Loading ontologies...")
-ontologies = {}
-#ontologies['UNIMOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/unimod.obo')
-ontologies['UNIMOD'] = Ontology(filename='/net/dblocal/wwwspecial/proteomecentral/extern/CVs/unimod.obo')
+# Define a subset of useful atomic masses and the proton
+atomic_masses = {
+    'proton': 1.00727646688,
+    'H': 1.007825035,
+    'C': 12.0000000,
+    'N': 14.0030740,
+    'O': 15.99491463,
+    'P': 30.973762,
+    'S': 31.9720707,
+}
 
 
 class UniversalSpectrumIdentifier(object):
@@ -197,6 +204,9 @@ class UniversalSpectrumIdentifier(object):
                 if match:
                     self.peptidoform_string = match.group(1)
                     self.charge = int(match.group(2))
+                else:
+                    self.set_error("MissingCharge",f"There is no charge number (e.g. '/2') provided in the interpretation '{self.interpretation}'")
+                    return self
 
         # If the MS run name begins with a [ then try to extract a subfolder
         if self.ms_run_name.startswith('['):
@@ -229,7 +239,7 @@ class UniversalSpectrumIdentifier(object):
 
         # Validate the collection identifier against the currently allowed set
         if self.collection_identifier is not None:
-            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$' }
+            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$', 'placeholder': r'USI000000' }
             for template_type,template in possible_templates.items():
                 match = re.match(template,self.collection_identifier)
                 if match:
@@ -239,8 +249,16 @@ class UniversalSpectrumIdentifier(object):
                 self.set_error("UnsupportedCollection",f"The collection identifier does not match a supported template")
                 return self
 
-        # Try to parse the peptidoform
-        self.parse_peptidoform(verbose=verbose)
+        #### Try to parse the peptidoform and extract useful information from it
+        if self.peptidoform_string is not None:
+            peptidoform = ProformaPeptidoform(self.peptidoform_string, verbose=verbose)
+            self.peptidoform = peptidoform.to_dict()
+
+            if peptidoform.response.n_errors == 0:
+                if self.peptidoform['neutral_mass'] and self.charge > 0:
+                    self.peptidoform['ion_mz'] = ( self.peptidoform['neutral_mass'] + atomic_masses['proton'] * self.charge ) / self.charge
+
+            self.error += peptidoform.response.n_errors
 
         # If there are no recorded errors, then we're in good shape
         if self.error == 0:
@@ -253,102 +271,6 @@ class UniversalSpectrumIdentifier(object):
             verboseprint("ERROR: Invalid USI " + self.usi)
 
         return self
-
-
-    #### Parse the peptidoform and decompose it into mass modifications
-    def parse_peptidoform(self, verbose=None):
-
-        if self.peptidoform_string is None:
-            return
-
-        characters = list(self.peptidoform_string)
-        character_stack = { 'square_brackets': 0 }
-
-        mass_modifications = {}
-        residues = []
-        self.peptidoform = { 'mass_modifications': mass_modifications, 'peptide_sequence': '' }
-        i_residue = 0
-        current_residue = ''
-
-        i_char = 0
-        for char in characters:
-            if char == '[':
-                character_stack['square_brackets'] += 1
-                current_residue += char
-            elif char == ']':
-                if character_stack['square_brackets'] == 0:
-                    print(f"ERROR: Unmatched square bracket at position {i_char}")
-                elif character_stack['square_brackets'] == 1:
-                    current_residue += char
-                    character_stack['square_brackets'] -= 1
-                else:
-                    character_stack['square_brackets'] -= 1
-            else:
-                if character_stack['square_brackets'] > 0:
-                    current_residue += char
-                else:
-                    residues.append( { 'residue_string': current_residue, 'index': i_residue } )
-                    i_residue += 1
-                    current_residue = char
-
-            #print(f"{i_char}=={char}. {i_residue}=={current_residue}")
-            i_char += 1
-
-        if current_residue != '':
-            residues.append( { 'residue_string': current_residue, 'index': i_residue } )
-            i_residue += 1
-
-        if residues[0]['residue_string'] == '':
-            residues = residues[1:]
-        #print(residues)
-
-        for residue in residues:
-            #print(residue)
-            if len(residue['residue_string']) > 1:
-                if residue['index'] == 0:
-                    residue['base_residue'] = 'nterm'
-                    offset = 1
-                else:
-                    residue['base_residue'] = residue['residue_string'][0]
-                    self.peptidoform['peptide_sequence'] += residue['residue_string'][0]
-                    offset = 2
-                residue['modification_string'] = residue['residue_string'][offset:-1]
-                residue['modification_type'] = ''
-
-                if residue['modification_type'] == '':
-                    match = re.match(r'[\+\-][\d\.]+',residue['modification_string'])
-                    if match:
-                        residue['delta_mass'] = float(match.group(0))
-                        residue['modification_type'] = 'delta_mass'
-
-                if residue['modification_type'] == '':
-                    match = re.match(r'UNIMOD:\d+',residue['modification_string'])
-                    if match:
-                        identifier = match.group(0)
-                        if identifier in ontologies['UNIMOD'].terms:
-                            term = ontologies['UNIMOD'].terms[identifier]
-                            residue['delta_mass'] = term.monoisotopic_mass
-                            residue['modification_name'] = term.name
-                        residue['modification_type'] = 'UNIMOD_identifier'
-
-                if residue['modification_type'] == '':
-                    if residue['modification_string'].upper() in ontologies['UNIMOD'].uc_names:
-                        matching_terms = ontologies['UNIMOD'].uc_names[residue['modification_string'].upper()]
-                        if len(matching_terms) == 1:
-                            identifier = matching_terms[0]
-                            if identifier in ontologies['UNIMOD'].terms:
-                                term = ontologies['UNIMOD'].terms[identifier]
-                                residue['delta_mass'] = term.monoisotopic_mass
-                                residue['modification_name'] = term.name
-                            residue['modification_type'] = 'UNIMOD_name'
-                mass_modifications[residue['index']] = residue
-
-            else:
-                self.peptidoform['peptide_sequence'] += residue['residue_string'][0]
-
-            #print(residue)
-
-
 
 
     # prints out USI attributes
@@ -372,63 +294,11 @@ class UniversalSpectrumIdentifier(object):
         #print("Peptidoform: " + str(self.peptidoform))
 
 
-# If this class is run from the command line, perform a short little test to see if it is working correctly
-def run_tests():
-    test_usis = [
-        [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951" ],
-        [ "invalid", "PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951" ],
-        [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951:PEPT[Phospho]IDELVISK/2" ],
-        [ "invalid", "mzspec:PASS002437:00261_A06_P001564_B00E_A00_R1:scan:10951:PEPT[Phospho]IDELVISK/2" ],
-        [ "invalid", None ],
-        [ "invalid", 3 ],
-        [ "invalid", "mzspec" ],
-        [ "invalid", "mzspec:" ],
-        [ "invalid", "mzspec:PXD001234" ],
-        [ "invalid", "mzspec:PXD001234:00261_A06_P001564_B00E_A00_R1:scan" ],
-        [   "valid", "mzspec:PXD001234:00261_A06_P001564_B00E_A00_R1:index:10951" ],
-        [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951:PEPT[Phospho]IDELVISK/2" ],
-        [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951:PEPT[+79]IDELVISK/2" ],
-        [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951:PEPT[UNIMOD:34]IDELVISK/2" ],
-        [   "valid", "mzspec:PXD001234:Dilution1:4:scan:10951"],
-        [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:test1:scan:10951:PEPT[Phospho]IDELVISK/2" ],
-        [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1\\:test1:scan:10951:PEPT[Phospho]IDELVISK/2" ],
-        [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951:PEPT[Phospho]IDELVISK/2:PA-28732" ],
-        [   "valid", "mzspec:PXD001234:[Control]fr10:scan:10951" ],
-        [   "valid", "mzspec:PXD001234:[Control[2]]fr10:scan:10951" ],
-        [   "valid", "mzspec:PXD001234:[Control]fr10[7]:scan:10951" ],
-        [   "valid", "mzspec:PXD001234:[Control[2]]fr10[7]:scan:10951" ],
-    ]
-    test_usisValid = []
 
-    # Loop over each test USI, parse it, and determine if it is valid or not, and print the index number
-    print("Testing example USIs:")
-    for usiSet in test_usis:
-        expectedStatus = usiSet[0]
-        usi_string = usiSet[1]
-
-        # Create a new UniversalSpectrumIdentifier object
-        # made the USI object itself take a string so that parse does not need to be called explicitly
-        usi = UniversalSpectrumIdentifier(usi_string)
-        expected_validity = True
-        if expectedStatus == 'invalid':
-            expected_validity = False
-        else:
-            expectedStatus = 'valid  '
-
-        status = 'PASS'
-        if usi.is_valid is not expected_validity:
-            status = 'FAIL'
-
-        response = usi.is_valid
-        test_usisValid.append(response)
-        print(f"{status}\texpected {expectedStatus}\t{usi_string}")
-    # check to see if parsing is correct
-    #print(test_usisValid)
-
-
-#### A very simple example of using this class
-def run_one_test():
-    test_usis = [
+############################################################################################
+#### Define example peptidoforms to parse
+def define_examples():
+    return [
         [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951" ],
         [ "invalid", "PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951" ],
         [   "valid", "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951:PEPT[Phospho]IDELVISK/2" ],
@@ -453,32 +323,88 @@ def run_one_test():
         [   "valid", "mzspec:PXD001234:[Control[2]]fr10[7]:scan:10951" ],
         [   "valid", "mzspec:MSV000086127:[Control[2]]fr10[7]:scan:10951" ],
         [   "valid", "mzspec:PXD002437:fr5:scan:10951:[UNIMOD:214]PEPT[Phospho]IDEL[+12.0123]VIS[UNIMOD:1]K[iTRAQ4plex]/2" ],
+        [   "valid", "mzspec:USI000000:a:scan:1:EM[Oxidation]EVEES[UNIMOD:21]PEK/2"], # 24
+        [   "valid", "mzspec:USI000000:a:scan:1:ELV[+11.9784|info:suspected frobinylation]IS/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:ELV[INFO:suspected frobinylation|+11.9784]IS/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:ELV[+11.9784|info:suspected frobinylation | INFO:confidence:high]IS/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:ELV[Oxidation | INFO:confidence:high]IS/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:ELV[info:AnyString]IS/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:EM[L-methionine sulfoxide]EVEES[MOD:00046]PEK/2"], # 30
+        [   "valid", "mzspec:USI000000:a:scan:1:[iTRAQ4plex]-EMEVNESPEK[UNIMOD:214]-[Methyl]/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:[iTRAQ4plex]-EM[Oxidation]EVNESPEK[UNIMOD:214]-[Methyl]/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:SEQUEN[Glycan:HexNAc1Hex 2]CE/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:SEQUEN[Formula:C12H20O2]CE/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:YPVLN[GNO:G62765YT]VTMPN[GNO:G02815KT]NSNGKFDK/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:SN{Hex|INFO:completely labile}ACK/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:{Hex|INFO:completely labile}DINNER/2"],
+        [   "valid", "mzspec:PXD000000:a:scan:1:{Hex|INFO:completely labile}[iTRAQ4plex]-EM[Oxidation]EVNESPEK[UNIMOD:214]-[Methyl]/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:EM[Oxidation]EVEES[U:Phospho]PEK/2"],
+        [   "valid", "mzspec:USI000000:a:scan:1:EM[Carboxyamidomethylation]EVEES[U:homoarginine]PEK/2"], # 40
+        [ "invalid", "mzspec:USI000000:a:scan:1:EM[U:L-methionine sulfoxide]E[U:Phospho]V[P:Phospho]EES[P:L-methionine sulfoxide]P[UNIMOD:99999]E[MOD:99999]K/2"],
     ]
  
-    usi_string = test_usis[2][1]
 
-    usi = UniversalSpectrumIdentifier()
-    usi.parse(usi_string, verbose=1)
-    print('==== Result:')
-    usi.show()
-    print(json.dumps(usi.peptidoform, sort_keys=True, indent=2))
+ # Run all examples through the parser and see if the results are as expected
+def run_tests():
+    examples = define_examples()
+    validity_map = { 'valid': True, 'invalid': False }
+
+    # Loop over each test USI, parse it, and determine if it is valid or not, and print the index number
+    print("Testing example USIs:")
+    i_counter = 0
+    for example in examples:
+        expected_status = example[0]
+        usi_string = example[1]
+
+        usi = UniversalSpectrumIdentifier()
+        usi.parse(usi_string)
+
+        status = 'OK'
+        if usi.is_valid != validity_map[expected_status]:
+            status = 'FAIL'
+
+        print(f"{i_counter}\t{status}\texpected {expected_status}\t{usi_string}")
+        i_counter += 1
 
 
 #### A very simple example of using this class
-def example():
-    usi_string = "mzspec:PXD002437:00261_A06_P001564_B00E_A00_R1:scan:10951"
-    usi_string = "mzspec:PXL000001:01-09-2015:index:500"
-    usi_string = "mzspec:PXL000001::index:500"
-    usi = UniversalSpectrumIdentifier(usi_string)
-    #usi.parse(verbose=1)
-    usi.show()
+def run_one_example(example_number):
+    examples = define_examples()
+ 
+    usi_string = examples[example_number][1]
+
+    usi = UniversalSpectrumIdentifier()
+    usi.parse(usi_string, verbose=1)
+
+    print('==== USI:')
+    print(json.dumps(usi.__dict__, sort_keys=True, indent=2))
 
 
 #### If class is run directly
 def main():
-    #example()
-    #run_tests()
-    run_one_test()
+
+    #### Parse command line options
+    import argparse
+    argparser = argparse.ArgumentParser(description='Command line interface to the UniversalSpectrumIdentifier class')
+    argparser.add_argument('--verbose', action='count', help='If set, print out messages to STDERR as they are generated' )
+    argparser.add_argument('--example', type=int, help='Specify an example to run instead of unit tests (use --example=1)')
+    argparser.add_argument('--test', action='count', help='If set, run all tests')
+    params = argparser.parse_args()
+
+    #### Set verbosity of the Response class
+    if params.verbose is not None:
+        Response.output = 'STDERR'
+
+    #### If --test is specified, run the full test suite adn return
+    if params.test is not None:
+        run_tests()
+        return
+
+    #### If --example is specified, run that example number
+    example_number = 23
+    if params.example is not None:
+        example_number = params.example
+    run_one_example(example_number)
 
 
 if __name__ == "__main__": main()
