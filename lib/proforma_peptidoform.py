@@ -70,9 +70,10 @@ class ProformaPeptidoform(object):
 
         if len(ontologies) == 0:
             #print("Loading ontologies...", end='', flush=True)
-            ontologies['UNIMOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/unimod.obo')
-            ontologies['PSI-MOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/PSI-MOD.obo')
-            #ontologies['UNIMOD'] = Ontology(filename='/net/dblocal/wwwspecial/proteomecentral/extern/CVs/unimod.obo')
+            #ontologies['UNIMOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/unimod.obo')
+            #ontologies['PSI-MOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/PSI-MOD.obo')
+            ontologies['UNIMOD'] = Ontology(filename='/net/dblocal/wwwspecial/proteomecentral/extern/CVs/unimod.obo')
+            ontologies['PSI-MOD'] = Ontology(filename='/net/dblocal/wwwspecial/proteomecentral/extern/CVs/PSI-MOD.obo')
             #print(" done.")
 
         if peptidoform_string:
