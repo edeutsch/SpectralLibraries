@@ -117,7 +117,7 @@ class UniversalSpectrumIdentifier(object):
         if usi.startswith("mzspec:"):
             usi_body = usi[len("mzspec:"):]
         else:
-            self.set_error("MissingPrefix","USI string does not begin with prefix 'mszpec:'")
+            self.set_error("MissingPrefix","USI string does not begin with prefix 'mzspec:'")
             return self
 
         # creates list of potential usi components
