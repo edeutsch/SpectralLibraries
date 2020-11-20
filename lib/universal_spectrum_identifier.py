@@ -113,6 +113,16 @@ class UniversalSpectrumIdentifier(object):
         verboseprint = print if verbose else lambda *a, **k: None
         verboseprint(f"INFO: Parsing USI string '{usi}'")
 
+        # Ensure that the string does not start or end with space or else we can stop right here
+        match = re.match(r"\s",usi)
+        if match:
+            self.set_error("ExtraWhitespace","USI string begins with extra whitespace. Remove spaces.")
+            return self
+        match = re.search(r"\s$",usi)
+        if match:
+            self.set_error("ExtraWhitespace","USI string ends with extra whitespace. Remove spaces.")
+            return self
+
         # Ensure that the string starts with 'mzspec:' else we can stop right here
         if usi.startswith("mzspec:"):
             usi_body = usi[len("mzspec:"):]
@@ -341,6 +351,8 @@ def define_examples():
         [   "valid", "mzspec:USI000000:a:scan:1:EM[Oxidation]EVEES[U:Phospho]PEK/2"],
         [   "valid", "mzspec:USI000000:a:scan:1:EM[Carboxyamidomethylation]EVEES[U:homoarginine]PEK/2"], # 40
         [ "invalid", "mzspec:USI000000:a:scan:1:EM[U:L-methionine sulfoxide]E[U:Phospho]V[P:Phospho]EES[P:L-methionine sulfoxide]P[UNIMOD:99999]E[MOD:99999]K/2"],
+        [ "invalid", " mzspec:PXD001234:00261_A06_P001564_B00E_A00_R1:scan:10951"],
+        [ "invalid", "mzspec:PXD001234:00261_A06_P001564_B00E_A00_R1:scan:10951 "],
     ]
  
 
@@ -401,7 +413,6 @@ def main():
         return
 
     #### If --example is specified, run that example number
-    example_number = 23
     if params.example is not None:
         example_number = params.example
     run_one_example(example_number)
