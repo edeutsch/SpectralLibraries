@@ -269,6 +269,34 @@ class ProformaPeptidoform(object):
     def parse_modification_string(self, residue, verbose=None):
 
         modification_string = residue['modification_string']
+        print(residue)
+
+        #### try to handle the case of two consecutive mods
+        multiple_mods = modification_string.split('][')
+        is_first_mod = True
+        if len(multiple_mods) > 1:
+            for one_mod in multiple_mods:
+                one_residue = residue.copy()
+                one_residue['modification_string'] = one_mod
+                self.parse_modification_string(one_residue, verbose=verbose)
+                if is_first_mod is True:
+                    residue['modification_string'] = one_mod
+                    residue['modification_type'] = one_residue['modification_type']
+                    residue['modification_name'] = one_residue['modification_name']
+                    residue['modification_curie'] = one_residue['modification_curie']
+                    residue['delta_mass'] = one_residue['delta_mass']
+                else:
+                    residue['modification_string'] += ' & ' + one_mod
+                    residue['modification_type'] += ' & ' + one_residue['modification_type']
+                    residue['modification_name'] += ' & ' + one_residue['modification_name']
+                    residue['modification_curie'] += ' & ' + one_residue['modification_curie']
+                    residue['delta_mass'] += one_residue['delta_mass']
+
+                is_first_mod = False
+            return
+
+
+        #### Process the single mod
         modification_components = modification_string.split('|')
 
         for component in modification_components:
@@ -464,6 +492,7 @@ def define_examples():
         [ 19,   "valid", "EM[Oxidation]EVEES[U:Phospho]PEK"],
         [ 20,   "valid", "EM[Carboxyamidomethylation]EVEES[U:homoarginine]PEK"],
         [ 21, "invalid", "EM[U:L-methionine sulfoxide]E[U:Phospho]V[P:Phospho]EES[P:L-methionine sulfoxide]PEK"],
+        [ 22,   "valid", "HPDIY[Phospho][Oxidation]AVPIK"],    # two mods on the same residue
     ]
  
 
