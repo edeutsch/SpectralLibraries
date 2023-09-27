@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import sys
-def eprint(*args, **kwargs): print(*args, file=sys.stderr, **kwargs)
+def eprint(*args, **kwargs): print(*args, file=sys.stderr, flush=True, **kwargs)
 
 import re
 import json
+import os
 
 from ontology import Ontology
 from response import Response
@@ -56,7 +57,7 @@ amino_acid_masses = {
 class ProformaPeptidoform(object):
 
     ########################################################################################
-    def __init__(self, peptidoform_string=None, verbose=None):
+    def __init__(self, peptidoform_string=None, verbose=False):
 
         self.peptidoform_string = None
         self.peptide_sequence = None
@@ -69,12 +70,25 @@ class ProformaPeptidoform(object):
         self.is_valid = False
 
         if len(ontologies) == 0:
-            #print("Loading ontologies...", end='', flush=True)
-            #ontologies['UNIMOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/unimod.obo')
-            #ontologies['PSI-MOD'] = Ontology(filename='G:/Repositories/SVN/proteomics/var/CV/PSI-MOD.obo')
-            ontologies['UNIMOD'] = Ontology(filename='/net/dblocal/wwwspecial/proteomecentral/extern/CVs/unimod.obo')
-            ontologies['PSI-MOD'] = Ontology(filename='/net/dblocal/wwwspecial/proteomecentral/extern/CVs/PSI-MOD.obo')
-            #print(" done.")
+            if verbose:
+                eprint("Loading ontologies...")
+            possible_locations = [ '.', 'C:/local/Repositories/SVN/proteomics/var/CV', '/net/dblocal/wwwspecial/proteomecentral/extern/CVs' ]
+            ontology_filenames = {
+                'UNIMOD': 'unimod.obo',
+                'PSI-MOD': 'PSI-MOD.obo'
+            }
+            for ontology_key, ontology_filename in ontology_filenames.items():
+                for possible_location in possible_locations:
+                    ontology_path = possible_location + '/' + ontology_filename
+                    if os.path.exists( ontology_path ):
+                        if verbose:
+                            eprint(f" - Loading {ontology_key} from {ontology_path}")
+                        ontologies[ontology_key] = Ontology(filename=ontology_path)
+                        break
+                if ontology_key not in ontologies:
+                    eprint(f"ERROR: Unable to locate {ontology_key} with filename {ontology_filename}")
+            if verbose:
+                eprint(" - Done")
 
         if peptidoform_string:
             self.parse(peptidoform_string, verbose=None)
@@ -98,7 +112,7 @@ class ProformaPeptidoform(object):
 
 
     ########################################################################################
-    def parse(self, peptidoform_string=None, verbose=None):
+    def parse(self, peptidoform_string=None, verbose=False):
 
         # Verify that we were either passed a peptidoform_string or there was already one available
         if peptidoform_string is None:
@@ -266,10 +280,11 @@ class ProformaPeptidoform(object):
 
     ########################################################################################
     #### Parse the modification string of a residue and extract the necessary information
-    def parse_modification_string(self, residue, verbose=None):
+    def parse_modification_string(self, residue, verbose=False):
 
         modification_string = residue['modification_string']
-        print(residue)
+        if verbose:
+            print(residue)
 
         #### try to handle the case of two consecutive mods
         multiple_mods = modification_string.split('][')
@@ -465,41 +480,51 @@ class ProformaPeptidoform(object):
         return self.response
 
 
-
 ############################################################################################
 #### Define example peptidoforms to parse
 def define_examples():
-    return [
+    tests = [
         [ 0,    "valid", "PEPT[Phospho]IDELVISK" ],
-        [ 1,    "valid", "PEPT[+79]IDELVISK" ],
-        [ 2,    "valid", "PEPT[UNIMOD:34]IDELVISK" ],
-        [ 3,    "valid", "[UNIMOD:214]PEPT[Phospho]IDEL[+12.0123]VIS[UNIMOD:1]K[iTRAQ4plex]" ],
-        [ 4,    "valid", "EM[Oxidation]EVEES[UNIMOD:21]PEK"],
-        [ 5,    "valid", "ELV[+11.9784|info:suspected frobinylation]IS"],
-        [ 6,    "valid", "ELV[INFO:suspected frobinylation|+11.9784]IS"],
-        [ 7,    "valid", "ELV[+11.9784|info:suspected frobinylation | INFO:confidence:high]IS"],
-        [ 8,    "valid", "ELV[Oxidation | INFO:confidence:high]IS"],
-        [ 9,    "valid", "ELV[info:AnyString]IS"],
-        [ 10,   "valid", "EM[L-methionine sulfoxide]EVEES[MOD:00046]PEK"],
-        [ 11,   "valid", "[iTRAQ4plex]-EMEVNESPEK[UNIMOD:214]-[Methyl]"],
-        [ 12,   "valid", "[iTRAQ4plex]-EM[Oxidation]EVNESPEK[UNIMOD:214]-[Methyl]"],
-        [ 13,   "valid", "SEQUEN[Glycan:HexNAc1Hex2]CE"],
-        [ 14,   "valid", "SEQUEN[Formula:C12H20O2]CE"],
-        [ 15,   "valid", "YPVLN[GNO:G62765YT]VTMPN[GNO:G02815KT]NSNGKFDK"],
-        [ 16,   "valid", "SN{Hex|INFO:completely labile}ACK"],
-        [ 17,   "valid", "{Hex|INFO:completely labile}DINNER"],
-        [ 18,   "valid", "{Hex|INFO:completely labile}[iTRAQ4plex]-EM[Oxidation]EVNESPEK[UNIMOD:214]-[Methyl]"],
-        [ 19,   "valid", "EM[Oxidation]EVEES[U:Phospho]PEK"],
-        [ 20,   "valid", "EM[Carboxyamidomethylation]EVEES[U:homoarginine]PEK"],
-        [ 21, "invalid", "EM[U:L-methionine sulfoxide]E[U:Phospho]V[P:Phospho]EES[P:L-methionine sulfoxide]PEK"],
-        [ 22,   "valid", "HPDIY[Phospho][Oxidation]AVPIK"],    # two mods on the same residue
+        [ 0,    "valid", "PEPT[phospho]IDELVISK" ],
+        [ 0,    "valid", "PEPT[phosphorylation]IDELVISK" ],
+        [ 0,    "invalid", "PEPT[phos]IDELVISK" ],
+        [ 0,    "valid", "PEPT[+79]IDELVISK" ],
+        [ 0,    "valid", "PEPT[UNIMOD:34]IDELVISK" ],
+        [ 0,    "valid", "[UNIMOD:214]PEPT[Phospho]IDEL[+12.0123]VIS[UNIMOD:1]K[iTRAQ4plex]" ],
+        [ 0,    "valid", "EM[Oxidation]EVEES[UNIMOD:21]PEK"],
+        [ 0,    "valid", "ELV[+11.9784|info:suspected frobinylation]IS"],
+        [ 0,    "valid", "ELV[INFO:suspected frobinylation|+11.9784]IS"],
+        [ 0,    "valid", "ELV[+11.9784|info:suspected frobinylation | INFO:confidence:high]IS"],
+        [ 0,    "valid", "ELV[Oxidation | INFO:confidence:high]IS"],
+        [ 0,    "valid", "ELV[info:AnyString]IS"],
+        [ 0,   "valid", "EM[L-methionine sulfoxide]EVEES[MOD:00046]PEK"],
+        [ 0,   "valid", "[iTRAQ4plex]-EMEVNESPEK[UNIMOD:214]-[Methyl]"],
+        [ 0,   "valid", "[iTRAQ4plex]-EM[Oxidation]EVNESPEK[UNIMOD:214]-[Methyl]"],
+        [ 0,   "valid", "SEQUEN[Glycan:HexNAc1Hex2]CE"],
+        [ 0,   "valid", "SEQUEN[Formula:C12H20O2]CE"],
+        [ 0,   "valid", "YPVLN[GNO:G62765YT]VTMPN[GNO:G02815KT]NSNGKFDK"],
+        [ 0,   "valid", "SN{Hex|INFO:completely labile}ACK"],
+        [ 0,   "valid", "{Hex|INFO:completely labile}DINNER"],
+        [ 0,   "valid", "{Hex|INFO:completely labile}[iTRAQ4plex]-EM[Oxidation]EVNESPEK[UNIMOD:214]-[Methyl]"],
+        [ 0,   "valid", "EM[Oxidation]EVEES[U:Phospho]PEK"],
+        [ 0,   "valid", "EM[Carboxyamidomethylation]EVEES[U:homoarginine]PEK"],
+        [ 0, "invalid", "EM[U:L-methionine sulfoxide]E[U:Phospho]V[P:Phospho]EES[P:L-methionine sulfoxide]PEK"],
+        [ 0,   "valid", "HPDIY[Phospho][Oxidation]AVPIK"],    # two mods on the same residue
     ]
  
+    index = 0
+    for test in tests:
+        test[0] = index
+        index += 1
+
+    return tests
+
 
 # Run all examples through the parser and see if the results are as expected
 def run_tests():
     examples = define_examples()
     validity_map = { 'valid': True, 'invalid': False }
+    reverse_validity_map = { True: 'valid', False: 'invalid' }
 
     # Loop over each test USI, parse it, and determine if it is valid or not, and print the index number
     print("Testing example USIs:")
@@ -509,11 +534,12 @@ def run_tests():
 
         peptidoform = ProformaPeptidoform(peptidoform_string, verbose=1)
 
-        status = 'OK'
+        result = 'OK'
+        validity = reverse_validity_map[peptidoform.is_valid]
         if peptidoform.is_valid != validity_map[expected_status]:
-            status = 'FAIL'
+            result = 'FAIL'
 
-        print(f"{example[0]}\t{status}\texpected {expected_status}\t{peptidoform_string}")
+        print(f"{example[0]:4d}  {result:6s}{validity:9s} expected {expected_status:9s}{peptidoform_string}")
 
 
 #### A very simple example of using this class
@@ -531,6 +557,7 @@ def run_one_example(example_number):
     print(json.dumps(peptidoform.response.__dict__, sort_keys=True, indent=2))
 
 
+##############################################################################################################################
 #### If class is run directly
 def main():
 
