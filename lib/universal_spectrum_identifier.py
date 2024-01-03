@@ -249,7 +249,7 @@ class UniversalSpectrumIdentifier(object):
 
         # Validate the collection identifier against the currently allowed set
         if self.collection_identifier is not None:
-            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$', 'placeholder': r'USI000000' }
+            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$', 'placeholder': r'USI000000', 'MS2PIP': 'MS2PIP' }
             for template_type,template in possible_templates.items():
                 match = re.match(template,self.collection_identifier)
                 if match:
@@ -353,6 +353,7 @@ def define_examples():
         [ "invalid", "mzspec:USI000000:a:scan:1:EM[U:L-methionine sulfoxide]E[U:Phospho]V[P:Phospho]EES[P:L-methionine sulfoxide]P[UNIMOD:99999]E[MOD:99999]K/2"],
         [ "invalid", " mzspec:PXD001234:00261_A06_P001564_B00E_A00_R1:scan:10951"],
         [ "invalid", "mzspec:PXD001234:00261_A06_P001564_B00E_A00_R1:scan:10951 "],
+        [   "valid", "mzspec:MS2PIP:a:scan:0:EM[Oxidation]EVEES[Phospho]PEK/2"], # 44
     ]
  
 
