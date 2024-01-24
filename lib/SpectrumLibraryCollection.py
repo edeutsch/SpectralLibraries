@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-from __future__ import print_function
 import sys
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
+def eprint(*args, **kwargs): print(*args, file=sys.stderr, flush=True, **kwargs)
 
 import os
 from datetime import datetime
@@ -21,15 +19,24 @@ debug = False
 
 #### Define the database tables as classes
 class LibraryRecord(Base):
-  __tablename__ = 'library_record'
-  library_record_id = Column(Integer, primary_key=True)
-  id_name = Column(String(255), nullable=False)
-  version = Column(String(255), nullable=False)
-  status = Column(String(255), nullable=False)
-  original_name = Column(String(255), nullable=False)
-  original_checksum = Column(String(255), nullable=True)
-  n_entries = Column(Integer, nullable=True)
-  record_datetime = Column(DateTime, nullable=False)
+    __tablename__ = 'library_record'
+    library_record_id = Column(Integer, primary_key=True)
+    status = Column(String(20), nullable=False)
+    id_name = Column(String(20), nullable=False)
+    source = Column(String(100), nullable=True)
+    species = Column(String(100), nullable=True)
+    keywords = Column(String(100), nullable=True)
+    version_tag = Column(String(255), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    original_checksum = Column(String(50), nullable=True)
+    local_filename = Column(String(255), nullable=False)
+    local_checksum = Column(String(50), nullable=True)
+    title = Column(String(255), nullable=True)
+    publication = Column(String(255), nullable=True)
+    documentation_url = Column(String(255), nullable=True)
+    source_url = Column(String(255), nullable=True)
+    n_entries = Column(Integer, nullable=True)
+    record_datetime = Column(DateTime, nullable=False)
 
 
 class SpectrumLibraryCollection:
@@ -67,10 +74,10 @@ class SpectrumLibraryCollection:
 
         self.filename = filename
         if os.path.exists(self.filename):
-            if debug: eprint(f"INFO: Library collection {self.filename} exists")
+            if debug: eprint(f"DEBUG: Library collection {self.filename} exists")
             self.connect()
         else:
-            if debug: eprint(f"INFO: Library collection {self.filename} not found. Will create new.")
+            if debug: eprint(f"DEBUG: Library collection {self.filename} not found. Will create new.")
             self.createDatabase()
 
 
@@ -113,7 +120,7 @@ class SpectrumLibraryCollection:
         if os.path.exists(self.filename):
             eprint("INFO: Deleting previous database file " + self.filename)
             os.remove(self.filename)
-        if debug: eprint("INFO: Creating database " + self.filename)
+        eprint("INFO: Creating database " + self.filename)
         engine = create_engine("sqlite:///"+self.filename)
         Base.metadata.create_all(engine)
         self.connect()
@@ -121,7 +128,8 @@ class SpectrumLibraryCollection:
 
     #### Create and store a database connection
     def connect(self):
-        if debug: eprint("INFO: Connecting to database " + self.filename)
+        if debug:
+            eprint("DEBUG: Connecting to database " + self.filename)
         engine = create_engine("sqlite:///"+self.filename)
         DBSession = sessionmaker(bind=engine)
         session = DBSession()
@@ -131,7 +139,7 @@ class SpectrumLibraryCollection:
 
     #### Destroy the database connection
     def disconnect(self):
-        if debug: eprint("INFO: Disconnecting from database " + self.filename)
+        if debug: eprint("DEBUG: Disconnecting from database " + self.filename)
         session = self.session
         engine = self.engine
         session.close()
@@ -156,7 +164,8 @@ class SpectrumLibraryCollection:
         """
 
         #### Begin functionality here
-        if debug: eprint("INFO: Creating database " + self.filename)
+        if debug:
+            eprint("DEBUG: Creating database " + self.filename)
         if os.path.exists(self.filename):
             os.remove(self.filename)
         engine = create_engine("sqlite:///"+self.filename)
@@ -181,13 +190,14 @@ class SpectrumLibraryCollection:
         """
 
         #### Begin functionality here
-        if debug: eprint("INFO: Fetching all libraries")
+        if debug:
+            eprint("DEBUG: Fetching all libraries")
         session = self.session
         libraries = session.query(LibraryRecord).all()
         return(libraries)
 
 
-    def get_library(self,identifier=None,version=None,filename=None):
+    def get_library(self,identifier=None,version_tag=None,filename=None):
         """
         get_library - Return attributes of a specific library
 
@@ -204,21 +214,21 @@ class SpectrumLibraryCollection:
 
         session = self.session
         if identifier is not None and identifier > "":
-            libraries = session.query(LibraryRecord).filter(LibraryRecord.id_name==identifier).order_by(desc(LibraryRecord.version)).all()
+            libraries = session.query(LibraryRecord).filter(LibraryRecord.id_name==identifier).order_by(desc(LibraryRecord.version_tag)).all()
             if len(libraries) == 0:
                 raise Exception(f"No library with identifier {identifier} found")
             else:
                 libraryListStr = ""
                 for library in libraries:
-                    libraryListStr += library.version+","
-                    if version is not None and version > "":
-                        if version == library.version:
+                    libraryListStr += library.version_tag+","
+                    if version_tag is not None and version_tag > "":
+                        if version_tag == library.version_tag:
                             return(library)
-                if version is not None and version > "":
-                    raise Exception(f"Unable to find version {version} of library {identifier}")
+                if version_tag is not None and version_tag > "":
+                    raise Exception(f"Unable to find version {version_tag} of library {identifier}")
             if len(libraries) == 1:
                 return(library)
-            raise Exception(f"There are several version of this library ({libraryListStr}). Please specify a version")
+            raise Exception(f"There are several version of this library ({libraryListStr}). Please specify a version_tag")
             return()
 
         elif filename is not None and filename > "":
@@ -226,45 +236,77 @@ class SpectrumLibraryCollection:
         else:
             raise Exception("Not enough information to find library")
 
-        return()
 
-
-    def add_library(self, original_name, version="1"):
+    def add_library(self, attributes):
         """
         add_library - Add a new library
 
-        Extended description of function.
+        Adds a new library to the library collection database.
 
         Parameters
         ----------
-
+        attributes - Dict of library attributes that correspond to the table definition
+        
         Returns
         -------
-        int
-            Description of return value
+        None
         """
 
-        #### Begin functionality here
-        if debug: eprint("INFO: Adding a library entry")
+        if debug:
+            eprint("DEBUG: Adding a library entry")
+
+        #### Create a sanitized version of the attributes
+        checked_attributes = attributes.copy()
+        attribute_names = [ 'source', 'species', 'keywords', 'version_tag', 'original_filename',
+                            'original_checksum', 'local_filename', 'local_checksum', 'title',
+                            'publication', 'documentation_url', 'source_url', 'n_entries' ]
+        for attribute_name in attribute_names:
+            if attribute_name not in checked_attributes:
+                checked_attributes[attribute_name] = None
+
         session = self.session
-        library_record = LibraryRecord(id_name="PXL000000", version=version,
-            status="initial_add",original_name=original_name,record_datetime=datetime.now())
+        library_record = LibraryRecord(
+            status='Pending',
+            id_name="PXL000000",
+            source=checked_attributes['source'],
+            species=checked_attributes['species'],
+            keywords=checked_attributes['keywords'],
+            version_tag=checked_attributes['version_tag'],
+            original_filename=checked_attributes['original_filename'],
+            original_checksum=checked_attributes['original_checksum'],
+            local_filename=checked_attributes['local_filename'],
+            local_checksum=checked_attributes['local_checksum'],
+            title=checked_attributes['title'],
+            publication=checked_attributes['publication'],
+            documentation_url=checked_attributes['documentation_url'],
+            source_url=checked_attributes['source_url'],
+            n_entries=checked_attributes['n_entries'],
+            record_datetime=datetime.now()
+            )
         session.add(library_record)
         session.flush()
+
+        #### Get the primary key identifier
         assert(library_record.library_record_id)
         idstr = str(library_record.library_record_id)
-        if debug: eprint(f"INFO: Returned id={idstr}")
+        if debug:
+            eprint(f"DEBUG: Returned id={idstr}")
         idstr_length = len(idstr)
         assert(idstr_length)
+
+        #### Create and store the PXL identifier
         padding = "000000"
         new_idstr = "PXL" + padding[0:len(padding)-idstr_length] + idstr
         library_record.id_name = new_idstr
+        library_record.status = 'OK'
         session.flush()
         session.commit()
-        return()
+        if debug:
+            eprint(f"DEBUG: Record for {new_idstr} created")
+        return
 
 
-    def update_library_metadata(self, id, version=None):
+    def update_library_metadata(self, id, attributes=None):
         """
         update_library_metadata - Update the metadata associated with a library
 
@@ -284,9 +326,9 @@ class SpectrumLibraryCollection:
         session = self.session
         library = session.query(LibraryRecord).filter(LibraryRecord.library_record_id==id).first()
         if library is not None:
-            if version is not None:
-                print(f"    Updating version to {version}")
-                library.version = version
+            if attributes['version_tag'] is not None:
+                print(f"    Updating version_tag to {attributes['version_tag']}")
+                library.version_tag = attributes['version_tag']
             session.flush()
             session.commit()
         else:
