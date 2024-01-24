@@ -65,6 +65,7 @@ class ProformaPeptidoform(object):
         self.terminal_modifications = {}
         self.unlocalized_mass_modifications = {}
         self.neutral_mass = None
+        self.residues = []
 
         self.response = Response()
         self.is_valid = False
@@ -98,7 +99,7 @@ class ProformaPeptidoform(object):
     def to_dict(self):
         result = {}
         for key in [ 'peptidoform_string', 'peptide_sequence', 'residue_modifications', 'unlocalized_mass_modifications',
-            'terminal_modifications', 'neutral_mass', 'is_valid' ]:
+            'terminal_modifications', 'neutral_mass', 'is_valid', 'residues' ]:
             result[key] = self.__getattribute__(key)
         return result
 
