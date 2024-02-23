@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-#from __future__ import print_function
-#import sys
-#def eprint(*args, **kwargs):
-#    print(*args, file=sys.stderr, **kwargs)
+import sys
+def eprint(*args, **kwargs): print(*args, file=sys.stderr, **kwargs)
 
 import logging
 import re
@@ -84,7 +82,7 @@ class OntologyTerm(object):
             #### Process the id line
             match = re.search("^\s*id:",line)
             if match:
-                match = re.search("^\s*id:\s*(\S+)\s*$",line)
+                match = re.search("^\s*id:\s*(\S+)\s*(! .+)?$",line)
                 if match:
                     self.curie = match.groups()[0]
                     if ":" in self.curie:
