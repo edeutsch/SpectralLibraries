@@ -41,8 +41,15 @@ class UniversalSpectrumIdentifier(object):
         self.index = None
         self.interpretation = None
         self.peptidoform_string = None
+
+        #### Retain a single peptidoform context
         self.peptidoform = None
         self.charge = None
+
+        #### But also support multiple peptidoforms in one
+        self.peptidoforms = None
+        self.charges = None
+
         self.provenance_identifier = None
 
         self.error = 0
@@ -87,9 +94,14 @@ class UniversalSpectrumIdentifier(object):
         self.index_type = None
         self.index = None
         self.interpretation = None
-        self.peptidoform = None
         self.peptidoform_string = None
+
+        self.peptidoform = None
         self.charge = None
+
+        self.peptidoforms = None
+        self.charges = None
+
         self.provenance_identifier = None
 
         self.error = 0
@@ -199,24 +211,62 @@ class UniversalSpectrumIdentifier(object):
         # Try to decompose the interpretation string
         if self.interpretation is not None:
 
-            # First check to see if this is PSM provenance identifier
-            match = re.match(r'(.+)/(\d+):(.+)$', self.interpretation)
-            if match:
-                self.interpretation = match.group(1) + '/' + match.group(2)
-                self.provenance_identifier = match.group(3)
-                self.peptidoform_string = match.group(1)
-                self.charge = int(match.group(2))
-                self.identifier_type = 'UPSMPI'
+            #### First split into multiple peptidoforms if there is more than one
+            characters = list(self.interpretation)
+            i_char = 0
+            i_component = 0
+            n_characters = len(characters)
+            bracket_counts = { 'paren': 0, 'square': 0, 'curly': 0 }
+            components = [ '' ]
+            while i_char < n_characters:
+                char = characters[i_char]
 
-            # Otherwise try to decompose the interpretation
-            else:
-                match = re.match(r'(.+)/(\d+)$', self.interpretation)
+                #### If we already reached the of the peptidoform and are in the provenance identifier, just add to that
+                if self.identifier_type == 'UPSMPI':
+                    self.provenance_identifier += char
+                    i_char += 1
+                    continue
+
+                #### Count brackets. Every open must have a close
+                if char == '(': bracket_counts['paren'] += 1
+                if char == ')': bracket_counts['paren'] -= 1
+                if char == '[': bracket_counts['square'] += 1
+                if char == ']': bracket_counts['square'] -= 1
+                if char == '{': bracket_counts['curly'] += 1
+                if char == '}': bracket_counts['curly'] -= 1
+
+                #### If we encounter a + that is not in brackets, then this must be the start to a new peptidoform
+                if char == '+' and bracket_counts['paren'] == 0 and bracket_counts['square'] == 0 and bracket_counts['curly'] == 0:
+                    components.append('')
+                    i_component += 1
+                    i_char += 1
+                    continue
+
+                #### If there is a colon that is not within brackets, it must be the start of a PSM provenance identifier
+                if char == ':' and bracket_counts['paren'] == 0 and bracket_counts['square'] == 0 and bracket_counts['curly'] == 0:
+                    self.provenance_identifier = ''
+                    self.identifier_type = 'UPSMPI'
+                    self.interpretation = self.interpretation[:i_char]
+                    i_char += 1
+                    continue
+
+                components[i_component] += char
+                i_char += 1
+
+            self.peptidoform_strings = []
+            self.peptidoforms = []
+            self.charges = []
+            for component in components:
+                match = re.match(r'(.+)/(\d+)$', component)
                 if match:
-                    self.peptidoform_string = match.group(1)
-                    self.charge = int(match.group(2))
+                    self.peptidoform_strings.append(match.group(1))
+                    self.charges.append(int(match.group(2)))
                 else:
-                    self.set_error("MissingCharge",f"There is no charge number (e.g. '/2') provided in the interpretation '{self.interpretation}'")
+                    self.set_error("MissingCharge",f"There is no charge number (e.g. '/2') provided in the interpretation '{component}'")
                     return self
+            self.peptidoform_string = self.peptidoform_strings[0]
+            self.charge = self.charges[0]
+
 
         # If the MS run name begins with a [ then try to extract a subfolder
         if self.ms_run_name.startswith('['):
@@ -249,7 +299,7 @@ class UniversalSpectrumIdentifier(object):
 
         # Validate the collection identifier against the currently allowed set
         if self.collection_identifier is not None:
-            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$', 'placeholder': r'USI000000', 'MS2PIP': 'MS2PIP' }
+            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$', 'placeholder': r'USI000000', 'MS2PIP': 'MS2PIP', 'Seq2MS': 'Seq2MS' }
             for template_type,template in possible_templates.items():
                 match = re.match(template,self.collection_identifier)
                 if match:
@@ -261,14 +311,21 @@ class UniversalSpectrumIdentifier(object):
 
         #### Try to parse the peptidoform and extract useful information from it
         if self.peptidoform_string is not None:
-            peptidoform = ProformaPeptidoform(self.peptidoform_string, verbose=verbose)
-            self.peptidoform = peptidoform.to_dict()
+            i_peptidoform = 0
+            for peptidoform_string in self.peptidoform_strings:
+                peptidoform = ProformaPeptidoform(peptidoform_string, verbose=verbose)
+                self.peptidoforms.append(peptidoform.to_dict())
 
-            if peptidoform.response.n_errors == 0:
-                if self.peptidoform['neutral_mass'] and self.charge > 0:
-                    self.peptidoform['ion_mz'] = ( self.peptidoform['neutral_mass'] + atomic_masses['proton'] * self.charge ) / self.charge
+                if peptidoform.response.n_errors == 0:
+                    if self.peptidoforms[i_peptidoform]['neutral_mass'] and self.charges[i_peptidoform] > 0:
+                        self.peptidoforms[i_peptidoform]['ion_mz'] = ( self.peptidoforms[i_peptidoform]['neutral_mass'] + atomic_masses['proton'] * self.charges[i_peptidoform] ) / self.charges[i_peptidoform]
+                        self.peptidoforms[i_peptidoform]['charge'] = self.charges[i_peptidoform]
 
-            self.error += peptidoform.response.n_errors
+                self.error += peptidoform.response.n_errors
+                i_peptidoform += 1
+            self.peptidoform = self.peptidoforms[0].copy()
+            if len(self.peptidoforms) > 1:
+                self.peptidoform['ALERT'] = 'WARNING: This peptidoform is the first of several. This single peptidoform is provided for backwards compatibility, but is not seeing the whole picture!'
 
         # If there are no recorded errors, then we're in good shape
         if self.error == 0:
@@ -354,6 +411,8 @@ def define_examples():
         [ "invalid", " mzspec:PXD001234:00261_A06_P001564_B00E_A00_R1:scan:10951"],
         [ "invalid", "mzspec:PXD001234:00261_A06_P001564_B00E_A00_R1:scan:10951 "],
         [   "valid", "mzspec:MS2PIP:a:scan:0:EM[Oxidation]EVEES[Phospho]PEK/2"], # 44
+        [   "valid", "mzspec:PXD046281:20170322_JP_Qexactive_B31_rep-2_run-4:scan:32011:VNELTDIVGLHK/2+GLINSSNSIYLR/2"],
+        [   "valid", "mzspec:PXD046281:20170322_JP_Qexactive_B31_rep-2_run-4:scan:32011:VNELT[Myristoyl+Delta:H(-4)]DIVGLHK/2+GLINSSN[+12.0123]SIYLR/2"],
     ]
  
 
@@ -416,7 +475,10 @@ def main():
     #### If --example is specified, run that example number
     if params.example is not None:
         example_number = params.example
-    run_one_example(example_number)
+        run_one_example(example_number)
+        return
+
+    print("ERROR: Insufficient parameters. See --help for more information")
 
 
 if __name__ == "__main__": main()
