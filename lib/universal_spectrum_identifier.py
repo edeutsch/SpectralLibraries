@@ -413,6 +413,7 @@ def define_examples():
         [   "valid", "mzspec:MS2PIP:a:scan:0:EM[Oxidation]EVEES[Phospho]PEK/2"], # 44
         [   "valid", "mzspec:PXD046281:20170322_JP_Qexactive_B31_rep-2_run-4:scan:32011:VNELTDIVGLHK/2+GLINSSNSIYLR/2"],
         [   "valid", "mzspec:PXD046281:20170322_JP_Qexactive_B31_rep-2_run-4:scan:32011:VNELT[Myristoyl+Delta:H(-4)]DIVGLHK/2+GLINSSN[+12.0123]SIYLR/2"],
+        [   "valid", "mzspec:PXD032954:210129_mCherry_TrypsinLysC_3h:scan:8088:EGVSKD[Cation:Fe[III]]DAEALK/3"],
     ]
  
 

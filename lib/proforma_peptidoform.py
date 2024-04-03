@@ -157,6 +157,7 @@ class ProformaPeptidoform(object):
                     current_residue += char
                     character_stack['square_brackets'] -= 1
                 else:
+                    current_residue += char
                     character_stack['square_brackets'] -= 1
             elif char == '{':
                 character_stack['curly_brackets'] += 1
@@ -172,6 +173,7 @@ class ProformaPeptidoform(object):
                         self.unlocalized_mass_modifications.append(( { 'residue_string': current_residue, 'index': -1 } ))
                         current_residue = ''
                 else:
+                    current_residue += char
                     character_stack['curly_brackets'] -= 1
             else:
                 if character_stack['square_brackets'] > 0 or character_stack['curly_brackets'] > 0:
