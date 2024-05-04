@@ -320,6 +320,10 @@ class UniversalSpectrumIdentifier(object):
                     if self.peptidoforms[i_peptidoform]['neutral_mass'] and self.charges[i_peptidoform] > 0:
                         self.peptidoforms[i_peptidoform]['ion_mz'] = ( self.peptidoforms[i_peptidoform]['neutral_mass'] + atomic_masses['proton'] * self.charges[i_peptidoform] ) / self.charges[i_peptidoform]
                         self.peptidoforms[i_peptidoform]['charge'] = self.charges[i_peptidoform]
+                else:
+                    #print(json.dumps(peptidoform.response.__dict__, indent=2))
+                    self.set_error(peptidoform.response.error_code,peptidoform.response.message)
+                    return self
 
                 self.error += peptidoform.response.n_errors
                 i_peptidoform += 1
@@ -414,6 +418,7 @@ def define_examples():
         [   "valid", "mzspec:PXD046281:20170322_JP_Qexactive_B31_rep-2_run-4:scan:32011:VNELTDIVGLHK/2+GLINSSNSIYLR/2"],
         [   "valid", "mzspec:PXD046281:20170322_JP_Qexactive_B31_rep-2_run-4:scan:32011:VNELT[Myristoyl+Delta:H(-4)]DIVGLHK/2+GLINSSN[+12.0123]SIYLR/2"],
         [   "valid", "mzspec:PXD032954:210129_mCherry_TrypsinLysC_3h:scan:8088:EGVSKD[Cation:Fe[III]]DAEALK/3"],
+        [ "invalid", "mzspec:PXD032954:210129_mCherry_TrypsinLysC_3h:scan:8088:EGVSKD[Caton:Fe[III]]DAEALK/3"],
     ]
  
 
