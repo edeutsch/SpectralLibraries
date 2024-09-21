@@ -265,7 +265,7 @@ class ProformaPeptidoform(object):
             del(unlocalized_mass_modification['index'])
 
         #### If the peptide sequence ends with a -, then just clip it off:
-        if self.peptide_sequence[-1] == '-':
+        if self.peptide_sequence.endswith('-'):
             self.peptide_sequence = self.peptide_sequence.rstrip('-')
 
         #### Set final status
