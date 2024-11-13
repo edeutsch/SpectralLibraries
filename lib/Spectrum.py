@@ -161,11 +161,14 @@ class Spectrum:
                 elif len(values) == 3:
                     mz, intensity, interpretations = values
                 elif len(values) > 3:
-                    mz, intensity, interpretations = values[0:2]
+                    mz = values[0]
+                    intensity = values[1]
+                    interpretations = values[2]
                 else:
                     mz = "1"
                     intensity = "1"
 
+                # Strip any double quotes in the interpretation string
                 interpretations = interpretations.strip('"')
 
                 #### Add to the peak list
