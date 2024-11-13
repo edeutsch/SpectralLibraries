@@ -16,6 +16,7 @@ import io
 import tarfile
 import urllib.request
 import shutil
+from zipfile import ZipFile
 
 
 #### Open a URL for a gzipped doument as a file
@@ -24,13 +25,23 @@ def open_url(url: str, buffer_size: int=4 ** 20):
         urllib.request.urlopen(url).read(buffer_size)
     )
 
-    arc = tarfile.open(
-        fileobj=buffer,
-        mode='r:gz')
+    if url.endswith('.zip'):
+        zipfile = ZipFile(buffer)
+        filename = list(zipfile.namelist())[0]
+        fh = zipfile.open(filename)
+        return fh
 
-    ti = arc.firstmember
-    fh = arc.extractfile(ti)
-    return fh
+    elif url.endswith('.tar.gz'):
+        arc = tarfile.open(
+            fileobj=buffer,
+            mode='r:gz')
+
+        ti = arc.firstmember
+        fh = arc.extractfile(ti)
+        return fh
+
+    else:
+        print(f"ERROR: Don't know how to fetch and decompress 'url'")
 
 
 #### Main
@@ -157,6 +168,8 @@ def main():
         #### Loop over all entries in the metadata files and check against the database
         i_library = 0
         for library_entry in metadata_entries:
+
+            print('========================================')
             i_library += 1
             library_record_id = library_entry['library_record_id']
             id_name = library_entry['id_name']
@@ -164,7 +177,6 @@ def main():
                 print(f"INFO: Row {i_library} has no library_record_id. Ending")
                 break
 
-            print('========================================')
             print(f"Processing library {id_name} ")
             existing_libraries = spectrum_library_collection.get_library(identifier=id_name)
             if existing_libraries is None:
@@ -189,7 +201,7 @@ def main():
 
                 print(f"  - URL for {filename} is {url}")
                 print(f"  - Fetching library..")
-                enable_library_downloading = False
+                enable_library_downloading = True
                 if enable_library_downloading:
                     if True:
                         with open_url(url) as infile:
