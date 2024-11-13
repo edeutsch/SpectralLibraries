@@ -7,7 +7,7 @@ import timeit
 import os
 
 from SpectrumLibraryIndex import SpectrumLibraryIndex
-from Spectrum import Spectrum
+from LibrarySpectrum import LibrarySpectrum
 
 
 debug = True
@@ -397,7 +397,7 @@ def example():
  
     spectrum_buffer = spectrum_library.get_spectrum(spectrum_index_number=2000)
     #print(spectrum_buffer)
-    spectrum = Spectrum()
+    spectrum = LibrarySpectrum()
     spectrum.parse(spectrum_buffer)
     buffer = spectrum.write(format="text")
     print(buffer)

@@ -15,7 +15,7 @@ basedir = os.path.dirname(os.path.abspath(__file__))+"/.."
 sys.path.append(basedir+"/lib")
 from SpectrumLibraryCollection import SpectrumLibraryCollection
 from SpectrumLibrary import SpectrumLibrary
-from Spectrum import Spectrum
+from LibrarySpectrum import LibrarySpectrum
 from universal_spectrum_identifier import UniversalSpectrumIdentifier
 
 
@@ -73,7 +73,7 @@ def main():
     spectrum_library.filename = library_file
 
     spectrum_buffer = spectrum_library.get_spectrum(spectrum_index_number=index_number)
-    spectrum = Spectrum()
+    spectrum = LibrarySpectrum()
     spectrum.parse(spectrum_buffer, spectrum_index=index_number)
     buffer = spectrum.write(format=params.output_format)
     print(buffer)
