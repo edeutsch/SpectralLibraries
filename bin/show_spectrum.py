@@ -53,16 +53,16 @@ def main():
         if not usi.is_valid:
             print(f"ERROR: {usi.error_code}: {usi.error_message}")
             return()
-        if usi.dataset_identifier.startswith("PXL"):
+        if usi.collection_identifier.startswith("PXL"):
             spec_lib_collection = SpectrumLibraryCollection(basedir + "/spectralLibraries/SpectrumLibraryCollection.sqlite")
-            #print(f"Looking up library for {usi.dataset_identifier}")
+            #print(f"Looking up library for {usi.collection_identifier}")
             try:
-                library = spec_lib_collection.get_library(identifier=usi.dataset_identifier, version=usi.ms_run_name)
+                library = spec_lib_collection.get_library(identifier=usi.collection_identifier, version_tag=usi.ms_run_name)
             except Exception as error:
                 print("ERROR:",error)
                 return()
             #print("Found record: " + "\t".join([str(library.library_record_id),library.id_name,library.version,library.original_name]))
-            library_file = basedir + "/spectralLibraries/" + library.original_name
+            library_file = basedir + "/spectralLibraries/" + library.original_filename
             index_number = usi.index
 
     if not os.path.isfile(library_file):
