@@ -35,6 +35,7 @@ def main():
     t0 = timeit.default_timer()
     spectrum_library.create_index()
     t1 = timeit.default_timer()
+    print()
     print('INFO: Elapsed time: ' + str(t1-t0))
 
 if __name__ == "__main__": main()
