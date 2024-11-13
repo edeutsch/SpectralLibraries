@@ -16,6 +16,9 @@ import io
 import tarfile
 import urllib.request
 import shutil
+
+
+#### Open a URL for a gzipped doument as a file
 def open_url(url: str, buffer_size: int=4 ** 20):
     buffer = io.BytesIO(
         urllib.request.urlopen(url).read(buffer_size)
@@ -30,6 +33,7 @@ def open_url(url: str, buffer_size: int=4 ** 20):
     return fh
 
 
+#### Main
 def main():
 
     argparser = argparse.ArgumentParser(description='Front-end for maintenance of a spectral library collection')
@@ -44,19 +48,21 @@ def main():
     params = argparser.parse_args()
 
     collection_dir = os.path.dirname(os.path.abspath(__file__))+"/../spectralLibraries"
+    database_file = 'SpectrumLibraryCollection.sqlite'
+    database_filepath = f"{collection_dir}/{database_file}"
 
     #### If --list, then list existing libraries
     if params.DROP is True:
-        if os.path.exists(collection_dir + "/SpectrumLibraryCollection.sqlite"):
+        if os.path.exists(database_filepath):
             print("INFO: DELETING the collections database and re-creating")
-            os.remove(collection_dir + "/SpectrumLibraryCollection.sqlite")
+            os.remove(database_filepath)
         else:
-            eprint(f"ERROR: Database xxx does not exist")
+            eprint(f"ERROR: Database {database_filepath} does not exist")
         return
 
 
     #### Get a listing of what entries are already in the collection
-    spectrum_library_collection = SpectrumLibraryCollection(collection_dir + "/SpectrumLibraryCollection.sqlite")
+    spectrum_library_collection = SpectrumLibraryCollection(database_filepath)
     libraries = spectrum_library_collection.get_libraries()
 
 
@@ -78,13 +84,9 @@ def main():
         library = spectrum_library_collection.get_library(identifier=params.id)
         if library is None:
             return
-        attribute_names = [ 'library_record_id', 'status', 'id_name',
-                    'source', 'species', 'keywords', 'version_tag', 'original_filename',
-                    'original_checksum', 'local_filename', 'local_checksum', 'title',
-                    'publication', 'documentation_url', 'source_url', 'n_entries',
-                    'record_datetime' ]
+        attribute_names = spectrum_library_collection.get_all_library_attribute_names()
         for attribute_name in attribute_names:
-            print(f"  {attribute_name:20s} = {getattr(library,attribute_name)}")
+            print(f"  {attribute_name:27s} = {getattr(library,attribute_name)}")
         return
 
 
@@ -102,8 +104,9 @@ def main():
         metadatafile = collection_dir + "/SpectrumLibraryCollection.tsv"
         metadata_dict = {}
         metadata_files = []
+        metadata_entries = []
         line_counter = 0
-        expected_column_names = [ 'source', 'species', 'keywords', 'version_tag', 'original_filename', 'title', 'publication', 'documentation_url', 'source_url' ]
+        expected_column_names = spectrum_library_collection.get_all_library_attribute_names()
         with open(metadatafile, 'r') as infile:
             print(f"INFO: Reading {metadatafile}")
             for line in infile:
@@ -117,20 +120,27 @@ def main():
                             eprint(f"ERROR: Expected fourth column to be '{expected_column_name}' but it was '{columns[icolumn]}'")
                             exit()
                         icolumn += 1
+                    print("INFO: Column headers in input file are correct")
                     continue
 
                 icolumn = 0
                 attributes = {}
                 for expected_column_name in expected_column_names:
                     try:
-                        attributes[expected_column_name] = columns[icolumn]
+                        value = columns[icolumn]
+                        if value == '':
+                            value = None
+                        attributes[expected_column_name] = value
                     except:
                         attributes[expected_column_name] = None
                     icolumn += 1
 
-                attributes['keywords']= attributes['keywords'].replace('"','')
-                attributes['version_tag']= attributes['version_tag'].replace('"','')
-                original_filename = columns[4]
+                if attributes['keywords'] is not None:
+                    attributes['keywords']= attributes['keywords'].replace('"','')
+                if attributes['version_tag'] is not None:
+                    attributes['version_tag']= attributes['version_tag'].replace('"','')
+                original_filename = columns[7]
+                metadata_entries.append(attributes)
                 metadata_dict[original_filename] = attributes
                 metadata_files.append(original_filename)
 
@@ -142,45 +152,86 @@ def main():
             match = re.fullmatch("(.+)\.(msp|sptxt)",filename)
             if match is not None:
                 local_file_dict[filename] = 1
+        print(f"INFO: Found {len(local_file_dict)} local library files")
 
-        #### Loop over all files in the metadata files and check against the database
-        for filename in metadata_files:
+        #### Loop over all entries in the metadata files and check against the database
+        i_library = 0
+        for library_entry in metadata_entries:
+            i_library += 1
+            library_record_id = library_entry['library_record_id']
+            id_name = library_entry['id_name']
+            if library_record_id is None or library_record_id == '':
+                print(f"INFO: Row {i_library} has no library_record_id. Ending")
+                break
+
+            print('========================================')
+            print(f"Processing library {id_name} ")
+            existing_libraries = spectrum_library_collection.get_library(identifier=id_name)
+            if existing_libraries is None:
+                print(f"  - This library is not yet in the database. Adding it.")
+                result_id_name = spectrum_library_collection.add_library(library_entry)
+                print(f"  - Library {result_id_name} has been added")
+            else:
+                print(f"  - This library is already in the database. Updating metadata")
+                result = spectrum_library_collection.update_library_metadata(id=library_record_id, attributes=library_entry, update_type='automation', changelog_comments='Updated metadata from master reference tsv')
+                print(f"  - Update result was: {result}")
+
+            filename = library_entry['original_filename']
 
             #### If the file doesn't exist here, then maybe we can fetch it
             if filename not in local_file_dict:
-                print(f"INFO: Did not file {filename} locally. Try to fetch it")
+                print(f"  - Did not find file {filename} locally. Try to fetch it")
                 try:
                     url = metadata_dict[filename]['source_url']
                 except:
                     print(f"ERROR: No URL for {filename}")
                     return
 
-                print(f" - URL for {filename} is {url}")
-                print(f" - Fetching library..")
-                if True:
-                    with open_url(url) as infile:
-                        with open(filename, 'wb') as outfile:
-                            shutil.copyfileobj(infile, outfile)
-                    local_file_dict[filename] = 1
+                print(f"  - URL for {filename} is {url}")
+                print(f"  - Fetching library..")
+                enable_library_downloading = False
+                if enable_library_downloading:
+                    if True:
+                        with open_url(url) as infile:
+                            with open(filename, 'wb') as outfile:
+                                shutil.copyfileobj(infile, outfile)
+                        local_file_dict[filename] = 1
+                    else:
+                        print(f"ERROR: Unable to fetch {url}")
+                        return
                 else:
-                    print(f"ERROR: Unable to fetch {url}")
-                    return
+                    print(f"  - (Remote file fetch turned off for the moment)")
 
             if filename in local_file_dict:
-                print(f"Processing {filename}")
+                print(f"  - Processing {filename}")
 
                 #### Check to see if there is an index file yet
                 if os.path.exists(f"{collection_dir}/{filename}.splindex"):
-                    print(" - Index already exists")
+                    print("  - Index already exists")
                 else:
-                    print(" - Need to create an index")
+                    print("  - Need to create an index")
                     spectrum_library = SpectrumLibrary()
                     spectrum_library.filename = f"{collection_dir}/{filename}"
                     t0 = timeit.default_timer()
                     spectrum_library.create_index()
                     t1 = timeit.default_timer()
-                    print(f"\n - Elapsed time: {t1-t0}")
+                    print(f"\n  - Elapsed time: {t1-t0}")
 
+            else:
+                print(f"ERROR: filename '{filename}' in the metadata file not found locally")
+                return
+
+        return
+
+    #### If we got here, there was no recognized command
+    print("ERROR: No valid set of parameters. See --help for more information")
+
+    return
+
+if __name__ == "__main__": main()
+
+
+'''
                 #### Check to see if the file is already registered
                 if filename in libraries_dict:
                     print(f" - This library is already in the collection as {libraries[libraries_dict[filename]].id_name}")
@@ -199,14 +250,4 @@ def main():
                         print(f"ERROR: There is no metadata entry for {filename} yet. Please create one and update again")
                         return
 
-            else:
-                print(f"ERROR: filename '{filename}' in the metadata file not found locally")
-                return
-
-
-    #### If we got here, there was no recognized command
-    print("ERROR: No valid set of parameters. See --help for more information")
-
-    return
-
-if __name__ == "__main__": main()
+'''
