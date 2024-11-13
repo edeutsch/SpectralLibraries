@@ -10,7 +10,7 @@ from SpectrumLibraryIndex import SpectrumLibraryIndex
 from Spectrum import Spectrum
 
 
-debug = False
+debug = True
 
 class SpectrumLibrary:
     """
@@ -121,6 +121,7 @@ class SpectrumLibrary:
         return(False)
 
 
+
     def read(self, create_index=None):
         """
         read - Read the entire library into memory
@@ -159,10 +160,13 @@ class SpectrumLibrary:
             n_spectra = 0
             start_index = 0
             file_offset = 0
+            #my_file_offset = 0
             line_beginning_file_offset = 0
             spectrum_file_offset = 0
             spectrum_name = ''
-            if debug: eprint("INFO: Reading..",end='',flush=True)
+            windows_line_endings = 0
+            first_line = True
+            if debug: eprint("INFO: Reading..")
             while 1:
                 line = infile.readline()
                 if len(line) == 0:
@@ -170,9 +174,19 @@ class SpectrumLibrary:
 
                 line_beginning_file_offset = file_offset
 
-                #### tell() is twice as slow as counting it myself
+                #### Detect if there are Windows line endings
+                if first_line:
+                    counted_file_offset = len(line)
+                    tell_file_offset = infile.tell()
+                    if counted_file_offset + 1 == tell_file_offset:
+                        eprint(f"INFO: Detected Windows line endings: line length={counted_file_offset}, tell()={tell_file_offset}")
+                        windows_line_endings = 1
+                    first_line = False
+
+                #### Note that tell() is twice as slow as counting it myself
                 #file_offset = infile.tell()
-                file_offset += len(line)
+                file_offset += len(line) + windows_line_endings
+                #if debug: eprint(f"my_file_offset={my_file_offset}, tell_file_offset={file_offset}")
 
                 line = line.rstrip()
                 if state == 'header':
@@ -195,13 +209,13 @@ class SpectrumLibrary:
                             if int(n_spectra/1000) == n_spectra/1000:
                                 self.index.commit()
                                 percent_done = int(file_offset/file_size*100+0.5)
-                                eprint(str(percent_done)+"%..",end='',flush=True)
+                                eprint(str(percent_done)+"%..",end='')
 
                         spectrum_file_offset = line_beginning_file_offset
                         spectrum_name = re.match('Name:\s+(.+)',line).group(1)
                         #print(spectrum_name)
                     spectrum_buffer.append(line)
-                #if n_spectra > 5:
+                #if n_spectra > 50:
                 #    break
 
             #### Process the last spectrum in the buffer
@@ -378,10 +392,11 @@ def example():
 
     #### Create a new RTXFeedback object
     spectrum_library = SpectrumLibrary()
-    spectrum_library.filename = "../refData/sigmaups1_consensus_final_true_lib.msp"
+    spectrum_library.filename = "../spectralLibraries/human_consensus_final_true_lib.msp"
     spectrum_library.read_header()
  
     spectrum_buffer = spectrum_library.get_spectrum(spectrum_index_number=2000)
+    #print(spectrum_buffer)
     spectrum = Spectrum()
     spectrum.parse(spectrum_buffer)
     buffer = spectrum.write(format="text")
