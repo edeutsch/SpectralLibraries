@@ -10,7 +10,7 @@ import json
 debug = True
 
 #A class that holds data for each spectrum that is read from the SpectralLibrary class
-class Spectrum:
+class LibrarySpectrum:
 
     #### Constructor
     def __init__(self):
