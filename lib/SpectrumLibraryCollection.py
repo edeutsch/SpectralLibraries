@@ -27,6 +27,7 @@ class LibraryRecord(Base):
     species = Column(String(255), nullable=True)
     keywords = Column(String(100), nullable=True)
     version_tag = Column(String(255), nullable=False)
+    release_date = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=False)
     original_md5_checksum = Column(String(50), nullable=True)
     local_filename = Column(String(255), nullable=True)
@@ -245,6 +246,7 @@ class SpectrumLibraryCollection:
                             'species',
                             'keywords',
                             'version_tag',
+                            'release_date',
                             'original_filename',
                             'original_md5_checksum',
                             'local_filename',
@@ -302,7 +304,7 @@ class SpectrumLibraryCollection:
 
 
 
-    def get_library(self,identifier=None,version_tag=None,filename=None):
+    def get_library(self, identifier=None, version_tag=None, filename=None):
         """
         get_library - Return attributes of a specific library
 
@@ -375,6 +377,7 @@ class SpectrumLibraryCollection:
             species=checked_attributes['species'],
             keywords=checked_attributes['keywords'],
             version_tag=checked_attributes['version_tag'],
+            release_date=checked_attributes['release_date'],
             original_filename=checked_attributes['original_filename'],
             original_md5_checksum=checked_attributes['original_md5_checksum'],
             local_filename=checked_attributes['local_filename'],
