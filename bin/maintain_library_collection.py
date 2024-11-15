@@ -17,21 +17,25 @@ import tarfile
 import urllib.request
 import shutil
 from zipfile import ZipFile
+import requests
 
 
 #### Open a URL for a gzipped doument as a file
 def open_url(url: str, buffer_size: int=4 ** 20):
-    buffer = io.BytesIO(
-        urllib.request.urlopen(url).read(buffer_size)
-    )
 
     if url.endswith('.zip'):
+        buffer = io.BytesIO(
+            urllib.request.urlopen(url).read(buffer_size)
+        )
         zipfile = ZipFile(buffer)
         filename = list(zipfile.namelist())[0]
         fh = zipfile.open(filename)
         return fh
 
     elif url.endswith('.tar.gz'):
+        buffer = io.BytesIO(
+            urllib.request.urlopen(url).read(buffer_size)
+        )
         arc = tarfile.open(
             fileobj=buffer,
             mode='r:gz')
@@ -41,7 +45,10 @@ def open_url(url: str, buffer_size: int=4 ** 20):
         return fh
 
     else:
-        print(f"ERROR: Don't know how to fetch and decompress 'url'")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # Raise an exception for bad status codes
+
+        return response.raw
 
 
 #### Main
@@ -150,7 +157,9 @@ def main():
                     attributes['keywords']= attributes['keywords'].replace('"','')
                 if attributes['version_tag'] is not None:
                     attributes['version_tag']= attributes['version_tag'].replace('"','')
-                original_filename = columns[7]
+                if attributes['release_date'] is not None:
+                    attributes['release_date']= attributes['release_date'].replace('"','')
+                original_filename = columns[8]
                 metadata_entries.append(attributes)
                 metadata_dict[original_filename] = attributes
                 metadata_files.append(original_filename)
@@ -192,6 +201,10 @@ def main():
 
             #### If the file doesn't exist here, then maybe we can fetch it
             if filename not in local_file_dict:
+                if 'yeast_qtof' in filename:
+                    print(f"  - Something wrong with {filename} Skip it for now!!!!!!!!!!!!!!!!!!!!!!!")
+                    continue
+
                 print(f"  - Did not find file {filename} locally. Try to fetch it")
                 try:
                     url = metadata_dict[filename]['source_url']
