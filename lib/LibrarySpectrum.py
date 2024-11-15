@@ -213,7 +213,8 @@ class LibrarySpectrum:
             "Mz_exact": "MS:1008032|theoretical monoisotopic m/z",
             "Mz_av": "MS:1008033|theoretical average m/z",
             "Inst": { "it": [ [ "MS:1000044|dissociation method", "MS:1002472|trap-type collision-induced dissociation" ] ],
-                      "hcd": [ [ "MS:1000044|dissociation method", "MS:1000422|beam-type collision-induced dissociation" ] ] },
+                      "hcd": [ [ "MS:1000044|dissociation method", "MS:1000422|beam-type collision-induced dissociation" ] ],
+                      "QExactive": [ [ "MS:1000031|instrument model", "MS:1001911|Q Exactive" ] ] },
             "Pep": { "Tryptic": [ [ "MS:1008030|number of enzymatic termini", 2 ], [ "MS:1001045|cleavage agent name", "MS:1001251|Trypsin" ] ],
                      "N-Semitryptic": [ [ "MS:1008030|number of enzymatic termini", 1 ], [ "MS:1001045|cleavage agent name", "MS:1001251|Trypsin" ] ],
                      "C-Semitryptic": [ [ "MS:1008030|number of enzymatic termini", 1 ], [ "MS:1001045|cleavage agent name", "MS:1001251|Trypsin" ] ],
@@ -524,8 +525,8 @@ class LibrarySpectrum:
                 elif len(attribute) == 3:
                     buffer += f"[{attribute[2]}]{attribute[0]}={attribute[1]}\n"
                 else:
-                    print("-ERROR: attribute has wrong number of elements:")
-                    print(attribute)
+                    eprint(f"ERROR (LSW527): Attribute has wrong number of elements (attribute={attribute})")
+                    continue
             for peak in self.peak_list:
                 buffer += "\t".join(peak)+"\n"
 
@@ -541,6 +542,12 @@ class LibrarySpectrum:
             buffer += "cv_param_group\taccession\tname\tvalue_accession\tvalue\n"
 
             for attribute in self.attributes:
+                if attribute is None or len(attribute) < 1:
+                    eprint(f"ERROR (LSW545): Attribute is None or too small (attribute={attribute})")
+                    continue
+                if attribute[0] == 'ERROR':
+                    eprint(f"ERROR (LSW548): Error interpreting spectrum header comment item (attribute={attribute})")
+                    continue
                 if len(attribute) == 2:
                     key,value = attribute
                     cv_param_group = ''
@@ -549,16 +556,14 @@ class LibrarySpectrum:
                     if format == "csv" and ',' in str(value):
                         value = '"' + value + '"'
                 else:
-                    print("ERROR: Unsupported number of items in attribute")
-                    print(attribute)
-                    sys.exit(10)
+                    eprint(f"ERROR (LSW558): Unsupported number of items in attribute={attribute}")
+                    continue
                 components = key.split('|',1)
                 if len(components) == 2:
                     accession,name = components
                 else:
-                    print("ERROR: Unsupported number of items in components")
-                    print(components)
-                    sys.exit(10)
+                    eprint(f"ERROR (LSW564): Unsupported number of items in components (attribute={attribute}), (components={components})")
+                    continue
                 components = str(value).split('|',1)
                 if len(components) == 2:
                     value_accession,value = components
@@ -571,9 +576,8 @@ class LibrarySpectrum:
                         value = '"' + value + '"'
                     value_accession = ''
                 else:
-                    print("ERROR: Unsupported number of items in components")
-                    print(components)
-                    sys.exit(10)
+                    eprint(f"ERROR (LSW578): Unsupported number of items in components (attribute={attribute}), (components={components})")
+                    continue
 
                 #### Create the data line
                 buffer += delimiter.join([cv_param_group,accession,name,value_accession,value])+"\n"
@@ -602,6 +606,12 @@ class LibrarySpectrum:
             #### Organize the attributes from the simple list into the appropriate JSON format
             attributes = []
             for attribute in self.attributes:
+                if attribute is None or len(attribute) < 1:
+                    eprint(f"ERROR (LSW609): Attribute is None or too small (attribute={attribute})")
+                    continue
+                if attribute[0] == 'ERROR':
+                    eprint(f"ERROR (LSW612): Error interpreting spectrum header comment item (attribute={attribute})")
+                    continue
                 reformed_attribute = {}
                 if len(attribute) == 2:
                     key,value = attribute
@@ -609,18 +619,16 @@ class LibrarySpectrum:
                     key,value,cv_param_group = attribute
                     reformed_attribute['cv_param_group'] = cv_param_group
                 else:
-                    print("ERROR: Unsupported number of items in attribute")
-                    print(attribute)
-                    sys.exit(10)
+                    eprint(f"ERROR (LSW621): Unsupported number of items in attribute={attribute}")
+                    continue
                 components = key.split('|',1)
                 if len(components) == 2:
                     accession,name = components
                     reformed_attribute['accession'] = accession
                     reformed_attribute['name'] = name
                 else:
-                    print("ERROR: Unsupported number of items in components")
-                    print(components)
-                    sys.exit(10)
+                    eprint(f"ERROR (LSW629): Unsupported number of items in components (attribute={attribute}), (components={components})")
+                    continue
                 components = str(value).split('|',1)
                 if len(components) == 2:
                     value_accession,value = components
@@ -629,9 +637,8 @@ class LibrarySpectrum:
                 elif len(components) == 1:
                     reformed_attribute['value'] = value
                 else:
-                    print("ERROR: Unsupported number of items in components")
-                    print(components)
-                    sys.exit(10)
+                    eprint(f"ERROR (LSW639): Unsupported number of items in components (attribute={attribute}), (components={components})")
+                    continue
                 attributes.append(reformed_attribute)
 
             spectrum = { "attributes": attributes, "mzs": mzs, "intensities": intensities,
