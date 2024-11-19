@@ -5,6 +5,8 @@ def eprint(*args, **kwargs): print(*args, file=sys.stderr, flush=True, **kwargs)
 import os
 from datetime import datetime
 
+from response import Response
+
 from sqlalchemy import Column, ForeignKey, Integer, Float, String, DateTime, Text, PickleType, LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -95,6 +97,8 @@ class SpectrumLibraryCollection:
             Filename of the SQLite database file that contains information about the collection of libraries available.
 
         """
+
+        self.response = Response()
 
         self.filename = filename
         if os.path.exists(self.filename):
@@ -320,28 +324,39 @@ class SpectrumLibraryCollection:
         """
 
         session = self.session
+
         if identifier is not None and identifier > "":
             libraries = session.query(LibraryRecord).filter(LibraryRecord.id_name==identifier).order_by(desc(LibraryRecord.version_tag)).all()
             if len(libraries) == 0:
-                return
+                self.response.error(f"No library for the specified PXL identifier was found", error_code="NonexistentIdentifier", http_status=400)
+                return self.response
             else:
                 libraryListStr = ""
                 for library in libraries:
                     libraryListStr += library.version_tag+","
                     if version_tag is not None and version_tag > "":
                         if version_tag == library.version_tag:
-                            return(library)
+                            self.response.data = library
+                            self.response.message = f"Library {identifier} found"
+                            return self.response
                 if version_tag is not None and version_tag > "":
-                    raise Exception(f"Unable to find version {version_tag} of library {identifier}")
+                    self.response.error(f"Unable to find the specified version tag for the specified library", error_code="NonexistentVersionTag", http_status=400)
+                    return self.response
+
             if len(libraries) == 1:
-                return(library)
-            raise Exception(f"There are several version of this library ({libraryListStr}). Please specify a version_tag")
-            return()
+                self.response.data = library
+                self.response.message = f"Library {identifier} found"
+                return self.response
+
+            self.response.error(f"There are several version of this library. Please specify a version_tag", error_code="VersionTagRequired", http_status=400)
+            return self.response
 
         elif filename is not None and filename > "":
-            raise Exception("Search by filename not implemented")
+            self.response.error(f"Search by filename not implemented", error_code="NotImplemented", http_status=400)
+            return self.response
         else:
-            raise Exception("Not enough information to find library")
+            self.response.error(f"Not enough information to find library", error_code="UnsufficientParameters", http_status=400)
+            return self.response
 
 
     def add_library(self, attributes):
@@ -560,14 +575,13 @@ def example2():
     #### Create a new or attach to existing library collection
     spec_lib_collection = SpectrumLibraryCollection("../spectralLibraries/SpectrumLibraryCollection.sqlite")
 
-    try:
-        library = spec_lib_collection.get_library(identifier="PXL000003", version="05-24-2011")
-    except Exception as error:
-        print("ERROR:",error)
+    result = spec_lib_collection.get_library(identifier="PXL000003", version_tag="2020-05-19")
+    if result.status == 'OK':
+        library = result.data
+        print("\t".join([str(library.library_record_id),library.id_name,library.version_tag,library.original_filename]))
         return()
-    print("\t".join([str(library.library_record_id),library.id_name,library.version,library.original_name]))
-    return()
-
+    else:
+        print(result.show())
 
 
 #### If this class is run from the command line, perform a short little test to see if it is working correctly
