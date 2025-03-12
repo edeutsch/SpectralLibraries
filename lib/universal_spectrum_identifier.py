@@ -299,7 +299,7 @@ class UniversalSpectrumIdentifier(object):
 
         # Validate the collection identifier against the currently allowed set
         if self.collection_identifier is not None:
-            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$', 'placeholder': r'USI000000', 'MS2PIP': 'MS2PIP', 'Seq2MS': 'Seq2MS' }
+            possible_templates = { 'PXD': r'PXD\d{6}$', 'PXL': r'PXL\d{6}$', 'MSV': r'MSV\d{9}$', 'placeholder': r'USI000000', 'PDC': r'PDC\d{6}$', 'MS2PIP': 'MS2PIP', 'Seq2MS': 'Seq2MS' }
             for template_type,template in possible_templates.items():
                 match = re.match(template,self.collection_identifier)
                 if match:
